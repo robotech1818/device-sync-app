@@ -382,8 +382,8 @@ export function appPageTemplate(username) {
         
         return fetch(url, { ...options, headers });
       }
-            
-      // 获取文件列表
+      
+      // Get file list
       async function loadFiles() {
         try {
           console.log('正在获取文件列表...');
@@ -391,11 +391,11 @@ export function appPageTemplate(username) {
           // 清除缓存的时间戳以确保获取最新数据
           // 避免浏览器缓存导致的问题
           const timestamp = new Date().getTime();
-          const response = await authenticatedFetch(`/api/files/list?_=${timestamp}`);
+          const response = await authenticatedFetch(\`/api/files/list?_=\${timestamp}\`);
           
           if (!response.ok) {
-            console.error(`文件列表请求失败，状态码: ${response.status}`);
-            throw new Error(`Server responded with ${response.status}`);
+            console.error(\`文件列表请求失败，状态码: \${response.status}\`);
+            throw new Error(\`Server responded with \${response.status}\`);
           }
           
           let data;
@@ -421,7 +421,7 @@ export function appPageTemplate(username) {
           
           if (!data.success) {
             console.error('API返回失败:', data.error);
-            fileListEl.innerHTML = `<li class="file-item"><div class="file-info"><h3 class="file-name">Error: ${data.error || 'Unknown error'}</h3></div></li>`;
+            fileListEl.innerHTML = \`<li class="file-item"><div class="file-info"><h3 class="file-name">Error: \${data.error || 'Unknown error'}</h3></div></li>\`;
             return;
           }
           
@@ -431,7 +431,7 @@ export function appPageTemplate(username) {
             return;
           }
           
-          console.log(`找到 ${data.files.length} 个文件，开始渲染`);
+          console.log(\`找到 \${data.files.length} 个文件，开始渲染\`);
           
           // 按最近修改时间排序
           data.files.sort((a, b) => {
@@ -440,7 +440,7 @@ export function appPageTemplate(username) {
           
           // 渲染每个文件
           data.files.forEach((file, index) => {
-            console.log(`渲染文件 ${index+1}/${data.files.length}: ${file.name}`);
+            console.log(\`渲染文件 \${index+1}/\${data.files.length}: \${file.name}\`);
             
             const li = document.createElement('li');
             li.className = 'file-item';
@@ -454,7 +454,7 @@ export function appPageTemplate(username) {
             
             const fileDetails = document.createElement('p');
             fileDetails.className = 'file-details';
-            fileDetails.textContent = `Type: ${file.type || 'unknown'} | Size: ${formatFileSize(file.size || 0)} | Modified: ${formatDate(file.lastModified || new Date())}`;
+            fileDetails.textContent = \`Type: \${file.type || 'unknown'} | Size: \${formatFileSize(file.size || 0)} | Modified: \${formatDate(file.lastModified || new Date())}\`;
             
             fileInfo.appendChild(fileName);
             fileInfo.appendChild(fileDetails);
@@ -481,7 +481,7 @@ export function appPageTemplate(username) {
           console.error('加载文件列表错误:', err);
           const fileListEl = document.getElementById('fileList');
           if (fileListEl) {
-            fileListEl.innerHTML = `<li class="file-item"><div class="file-info"><h3 class="file-name">Error loading files: ${err.message}</h3></div></li>`;
+            fileListEl.innerHTML = \`<li class="file-item"><div class="file-info"><h3 class="file-name">Error loading files: \${err.message}</h3></div></li>\`;
           }
         }
       }
@@ -491,7 +491,7 @@ export function appPageTemplate(username) {
         window.open(\`/api/files/download/\${fileId}?token=\${token}\`);
       }
       
-      // 上传文件
+      // Upload file
       async function uploadFile(file) {
         try {
           console.log('开始上传文件:', file.name, '大小:', file.size, '类型:', file.type);
@@ -515,8 +515,8 @@ export function appPageTemplate(username) {
           
           // 检查响应状态
           if (!response.ok) {
-            console.error(`上传失败，状态码: ${response.status}`);
-            alert(`Upload failed with status: ${response.status}`);
+            console.error(\`上传失败，状态码: \${response.status}\`);
+            alert(\`Upload failed with status: \${response.status}\`);
             return;
           }
           
@@ -552,11 +552,11 @@ export function appPageTemplate(username) {
             }, 1000);
           } else {
             console.error('上传失败:', data.error);
-            alert(`Upload failed: ${data.error || 'Unknown error'}`);
+            alert(\`Upload failed: \${data.error || 'Unknown error'}\`);
           }
         } catch (err) {
           console.error('上传文件错误:', err);
-          alert(`Error during upload: ${err.message}`);
+          alert(\`Error during upload: \${err.message}\`);
           
           // 恢复原始提示
           const dropzone = document.getElementById('dropzone');
@@ -573,7 +573,20 @@ export function appPageTemplate(username) {
           }
         }
       }
-
+      
+      // Format file size
+      function formatFileSize(bytes) {
+        if (bytes < 1024) return bytes + ' B';
+        if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + ' KB';
+        return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+      }
+      
+      // Format date
+      function formatDate(dateString) {
+        const date = new Date(dateString);
+        return date.toLocaleString();
+      }
+      
       // 重新初始化拖放区域
       function reinitializeDropzone() {
         console.log('重新初始化拖放区域');
@@ -633,59 +646,6 @@ export function appPageTemplate(username) {
         });
         
         console.log('拖放区域重新初始化完成');
-      }
-      
-      // Format file size
-      function formatFileSize(bytes) {
-        if (bytes < 1024) return bytes + ' B';
-        if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + ' KB';
-        return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
-      }
-      
-      // Format date
-      function formatDate(dateString) {
-        const date = new Date(dateString);
-        return date.toLocaleString();
-      }
-      
-      // Initialize drag and drop zone
-      function initDropzone() {
-        const dropzone = document.getElementById('dropzone');
-        const fileInput = document.getElementById('fileInput');
-        
-        // Click to upload
-        dropzone.addEventListener('click', () => {
-          fileInput.click();
-        });
-        
-        fileInput.addEventListener('change', () => {
-          if (fileInput.files.length > 0) {
-            uploadFile(fileInput.files[0]);
-          }
-        });
-        
-        // Drag and drop upload
-        dropzone.addEventListener('dragover', (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          dropzone.classList.add('highlight');
-        });
-        
-        dropzone.addEventListener('dragleave', (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          dropzone.classList.remove('highlight');
-        });
-        
-        dropzone.addEventListener('drop', (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          dropzone.classList.remove('highlight');
-          
-          if (e.dataTransfer.files.length > 0) {
-            uploadFile(e.dataTransfer.files[0]);
-          }
-        });
       }
       
       // Messages management
@@ -819,12 +779,6 @@ export function appPageTemplate(username) {
         }
       }
       
-      // Load messages
-      function loadMessages() {
-        const messages = JSON.parse(localStorage.getItem('syncMessages') || '[]');
-        renderMessages(messages);
-      }
-      
       // Render messages in UI
       function renderMessages(messages) {
         const deviceId = getDeviceId();
@@ -917,14 +871,14 @@ export function appPageTemplate(username) {
         return deviceId;
       }
       
-      // Logout
+// Logout
       document.getElementById('logoutBtn').addEventListener('click', () => {
         localStorage.removeItem('authToken');
         document.cookie = 'authToken=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
         window.location.href = '/login';
       });
       
-      // 初始化页面
+      // Initialize on page load
       window.addEventListener('load', () => {
         console.log('页面加载，开始初始化...');
         
