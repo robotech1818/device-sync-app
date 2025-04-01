@@ -3,24 +3,24 @@ export function loginPageTemplate() {
   <!DOCTYPE html>
   <html>
   <head>
-    <title>登录 - 设备同步应用</title>
+    <title>Login - Device Sync App</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
       body {
-        font-family: Arial, sans-serif;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         display: flex;
         justify-content: center;
         align-items: center;
         height: 100vh;
         margin: 0;
-        background-color: #f5f5f5;
+        background-color: #f0f2f5;
       }
       .login-container {
         background: white;
-        padding: 2rem;
-        border-radius: 8px;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        padding: 2.5rem;
+        border-radius: 10px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
         width: 100%;
         max-width: 400px;
       }
@@ -28,55 +28,76 @@ export function loginPageTemplate() {
         margin-top: 0;
         color: #333;
         text-align: center;
+        font-weight: 600;
+        font-size: 24px;
+      }
+      .app-description {
+        text-align: center;
+        color: #666;
+        margin-bottom: 20px;
       }
       .form-group {
-        margin-bottom: 1rem;
+        margin-bottom: 1.2rem;
       }
       label {
         display: block;
         margin-bottom: 0.5rem;
-        font-weight: bold;
+        font-weight: 500;
+        color: #555;
       }
       input {
         width: 100%;
-        padding: 0.5rem;
+        padding: 0.7rem;
         border: 1px solid #ddd;
-        border-radius: 4px;
+        border-radius: 6px;
         font-size: 1rem;
+        transition: border 0.3s;
+      }
+      input:focus {
+        outline: none;
+        border-color: #0066ff;
+        box-shadow: 0 0 0 2px rgba(0, 102, 255, 0.1);
       }
       button {
         background: #0066ff;
         color: white;
         border: none;
-        border-radius: 4px;
-        padding: 0.5rem 1rem;
+        border-radius: 6px;
+        padding: 0.7rem 1rem;
         font-size: 1rem;
         cursor: pointer;
         width: 100%;
+        font-weight: 500;
+        transition: background 0.3s;
       }
       button:hover {
         background: #0052cc;
       }
       .error {
-        color: red;
+        color: #e53935;
         margin-top: 1rem;
         display: none;
+        padding: 10px;
+        background-color: rgba(229, 57, 53, 0.1);
+        border-radius: 4px;
+        font-size: 14px;
       }
     </style>
   </head>
   <body>
     <div class="login-container">
-      <h1>设备同步应用</h1>
+      <h1>Device Sync App</h1>
+      <p class="app-description">Sync files and messages across your devices</p>
       <form id="loginForm">
         <div class="form-group">
-          <label for="username">用户名</label>
+          <label for="username">Username</label>
           <input type="text" id="username" name="username" required>
         </div>
         <div class="form-group">
-          <label for="password">密码</label>
+          <label for="password">Password</label>
           <input type="password" id="password" name="password" required>
         </div>
-        <button type="submit">登录</button>
+        <button type="submit">Log In</button>
         <div id="errorMessage" class="error"></div>
       </form>
     </div>
@@ -99,30 +120,33 @@ export function loginPageTemplate() {
           const data = await response.json();
           
           if (response.ok && data.success && data.token) {
-            // 添加调试日志
-            console.log('登录成功, 保存令牌:', data.token);
+            // Add debug log
+            console.log('Login successful, saving token:', data.token);
             
-            // 清除之前的令牌（如果有）
+            // Clear previous token (if any)
             localStorage.removeItem('authToken');
             
-            // 存储令牌
+            // Store token in localStorage
             localStorage.setItem('authToken', data.token);
             
-            // 确保在重定向前等待localStorage更新
+            // Also set as cookie (HTTP Only = false, allowing JavaScript access)
+            document.cookie = \`authToken=\${data.token}; path=/; max-age=\${data.expiresIn}; SameSite=Strict\`;
+            
+            // Ensure localStorage and cookie update before redirecting
             setTimeout(() => {
-              // 将令牌也作为URL参数传递
+              // Pass token as URL parameter
               window.location.href = '/app?token=' + encodeURIComponent(data.token);
             }, 300);
           } else {
-            // 显示错误信息
+            // Show error message
             const errorEl = document.getElementById('errorMessage');
-            errorEl.textContent = data.error || '登录失败';
+            errorEl.textContent = data.error || 'Login failed';
             errorEl.style.display = 'block';
           }
         } catch (err) {
-          console.error('登录错误:', err);
+          console.error('Login error:', err);
           const errorEl = document.getElementById('errorMessage');
-          errorEl.textContent = '发生错误，请稍后再试';
+          errorEl.textContent = 'An error occurred. Please try again later.';
           errorEl.style.display = 'block';
         }
       });
