@@ -382,37 +382,42 @@ export function appPageTemplate(username) {
         
         return fetch(url, { ...options, headers });
       }
-      
-      // Get file list
+            
+      // 获取文件列表
       async function loadFiles() {
         try {
+          console.log('正在获取文件列表...');
           const response = await authenticatedFetch('/api/files/list');
           
-          // Check authentication status
+          // 检查认证状态
           if (response.status === 401) {
-            console.error('Authentication failed, redirecting to login');
+            console.error('认证失败，重定向到登录页面');
             localStorage.removeItem('authToken');
             window.location.href = '/login';
             return;
           }
           
           const data = await response.json();
+          console.log('文件列表API返回数据:', data);
           
           const fileListEl = document.getElementById('fileList');
           
           if (!data.success || !data.files || data.files.length === 0) {
+            console.log('没有找到文件');
             fileListEl.innerHTML = '<li class="file-item"><div class="file-info"><h3 class="file-name">No files found</h3></div></li>';
             return;
           }
           
           fileListEl.innerHTML = '';
+          console.log(`找到${data.files.length}个文件`);
           
-          // Sort by last modified date
+          // 按最近修改时间排序
           data.files.sort((a, b) => {
             return new Date(b.lastModified) - new Date(a.lastModified);
           });
           
           data.files.forEach(file => {
+            console.log('渲染文件:', file.name);
             const li = document.createElement('li');
             li.className = 'file-item';
             
@@ -425,7 +430,7 @@ export function appPageTemplate(username) {
             
             const fileDetails = document.createElement('p');
             fileDetails.className = 'file-details';
-            fileDetails.textContent = \`Type: \${file.type} | Size: \${formatFileSize(file.size)} | Modified: \${formatDate(file.lastModified)}\`;
+            fileDetails.textContent = `Type: ${file.type} | Size: ${formatFileSize(file.size)} | Modified: ${formatDate(file.lastModified)}`;
             
             fileInfo.appendChild(fileName);
             fileInfo.appendChild(fileDetails);
@@ -445,10 +450,11 @@ export function appPageTemplate(username) {
             fileListEl.appendChild(li);
           });
           
-          // Update last sync time
+          // 更新上次同步时间
           localStorage.setItem('lastSyncTime', Date.now());
+          console.log('文件列表加载完成');
         } catch (err) {
-          console.error('Error loading files:', err);
+          console.error('加载文件列表错误:', err);
         }
       }
       
@@ -457,13 +463,14 @@ export function appPageTemplate(username) {
         window.open(\`/api/files/download/\${fileId}?token=\${token}\`);
       }
       
-      // Upload file
+      // 上传文件
       async function uploadFile(file) {
         try {
+          console.log('开始上传文件:', file.name);
           const formData = new FormData();
           formData.append('file', file);
           
-          // 使用authenticatedFetch函数而不是直接fetch
+          // 使用authenticatedFetch函数
           const response = await authenticatedFetch('/api/files/upload', {
             method: 'POST',
             body: formData
@@ -481,10 +488,20 @@ export function appPageTemplate(username) {
           
           if (data.success) {
             console.log('文件上传成功:', data);
-            loadFiles(); // 重新加载文件列表
+            
+            // 确保等待一小段时间后再加载文件列表，
+            // 让服务器有足够时间处理并保存文件
+            setTimeout(async () => {
+              console.log('刷新文件列表...');
+              await loadFiles(); 
+              console.log('文件列表已刷新');
+            }, 500);
+            
+            // 显示成功提示
+            alert('File uploaded successfully!');
           } else {
             console.error('上传失败:', data.error);
-            alert(\`Upload failed: \${data.error}\`);
+            alert(`Upload failed: ${data.error}`);
           }
         } catch (err) {
           console.error('上传文件错误:', err);
