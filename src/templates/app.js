@@ -456,27 +456,21 @@ export function appPageTemplate(username) {
       function downloadFile(fileId) {
         window.open(\`/api/files/download/\${fileId}?token=\${token}\`);
       }
-      
-      // Upload file
+            
       async function uploadFile(file) {
         try {
           const formData = new FormData();
           formData.append('file', file);
           
-          // Get latest token
-          const currentToken = getToken();
-          
-          const response = await fetch('/api/files/upload', {
+          // 使用authenticatedFetch函数而不是直接fetch
+          const response = await authenticatedFetch('/api/files/upload', {
             method: 'POST',
-            headers: {
-              'Authorization': \`Bearer \${currentToken}\`
-            },
             body: formData
           });
           
-          // Check authentication status
+          // 检查认证状态
           if (response.status === 401) {
-            console.error('Authentication failed during upload, redirecting to login');
+            console.error('认证失败，重定向到登录页面');
             localStorage.removeItem('authToken');
             window.location.href = '/login';
             return;
@@ -485,13 +479,15 @@ export function appPageTemplate(username) {
           const data = await response.json();
           
           if (data.success) {
-            loadFiles(); // Reload file list
+            console.log('文件上传成功:', data);
+            loadFiles(); // 重新加载文件列表
           } else {
-            alert(\`Upload failed: \${data.error}\`);
+            console.error('上传失败:', data.error);
+            alert(`上传失败: ${data.error}`);
           }
         } catch (err) {
-          console.error('File upload error:', err);
-          alert('An error occurred during upload');
+          console.error('上传文件错误:', err);
+          alert('上传过程中发生错误');
         }
       }
       
@@ -557,10 +553,13 @@ export function appPageTemplate(username) {
         const messageList = document.getElementById('messageList');
         const clearMessagesBtn = document.getElementById('clearMessagesBtn');
         
-        // Load existing messages from localStorage
-        loadMessages();
+        // 首先加载本地消息
+        const localMessages = JSON.parse(localStorage.getItem('syncMessages') || '[]');
         
-        // Send message
+        // 从服务器获取消息并合并
+        await loadAndMergeServerMessages(localMessages);
+        
+        // 发送消息事件处理
         messageForm.addEventListener('submit', (e) => {
           e.preventDefault();
           const messageText = messageInput.value.trim();
@@ -570,13 +569,57 @@ export function appPageTemplate(username) {
           }
         });
         
-        // Clear messages
-        clearMessagesBtn.addEventListener('click', () => {
-          if (confirm('Are you sure you want to clear all messages?')) {
+        // 清除消息事件处理
+        clearMessagesBtn.addEventListener('click', async () => {
+          if (confirm('确定要清除所有消息吗？')) {
             localStorage.removeItem('syncMessages');
-            loadMessages();
+            try {
+              // 也清除服务器上的消息
+              await authenticatedFetch('/api/messages/clear', {
+                method: 'POST'
+              });
+            } catch (err) {
+              console.error('清除服务器消息失败:', err);
+            }
+            renderMessages([]);
           }
         });
+        
+        // 从服务器加载消息并与本地消息合并
+        async function loadAndMergeServerMessages(localMessages) {
+          try {
+            const response = await authenticatedFetch('/api/messages');
+            if (response.ok) {
+              const data = await response.json();
+              if (data.success && data.messages) {
+                // 合并本地和服务器消息，避免重复
+                const serverMessages = data.messages;
+                const allMessages = [...localMessages];
+                
+                // 添加服务器上有但本地没有的消息
+                serverMessages.forEach(serverMsg => {
+                  if (!allMessages.some(localMsg => localMsg.id === serverMsg.id)) {
+                    allMessages.push(serverMsg);
+                  }
+                });
+                
+                // 按时间排序
+                allMessages.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+                
+                // 保存合并后的消息
+                localStorage.setItem('syncMessages', JSON.stringify(allMessages));
+                renderMessages(allMessages);
+              } else {
+                renderMessages(localMessages);
+              }
+            } else {
+              renderMessages(localMessages);
+            }
+          } catch (err) {
+            console.error('加载服务器消息失败:', err);
+            renderMessages(localMessages);
+          }
+        }
         
         // Load messages from localStorage
         function loadMessages() {
@@ -584,8 +627,7 @@ export function appPageTemplate(username) {
           renderMessages(messages);
         }
         
-        // Send new message
-        function sendMessage(text) {
+        async function sendMessage(text) {
           const deviceId = getDeviceId();
           const message = {
             id: Date.now() + Math.random().toString(36).substring(2, 9),
@@ -594,22 +636,22 @@ export function appPageTemplate(username) {
             timestamp: new Date().toISOString()
           };
           
-          // Add to localStorage
+          // 添加到localStorage
           const messages = JSON.parse(localStorage.getItem('syncMessages') || '[]');
           messages.push(message);
           
-          // Limit number of messages
+          // 限制消息数量
           if (messages.length > MAX_MESSAGES) {
             messages.splice(0, messages.length - MAX_MESSAGES);
           }
           
           localStorage.setItem('syncMessages', JSON.stringify(messages));
           
-          // Update UI
+          // 更新UI
           renderMessages(messages);
           
-          // Sync with server (optional feature, not implemented yet)
-          syncMessageToServer(message);
+          // 同步到服务器
+          await syncMessageToServer(message);
         }
         
         // Render messages in UI
@@ -662,14 +704,26 @@ export function appPageTemplate(username) {
             .replace(/'/g, '&#039;');
         }
         
-        // Sync message to server (placeholder function)
         async function syncMessageToServer(message) {
           try {
-            // This is where you would implement server syncing
-            // Not implemented in this version
-            console.log('Message would be synced:', message);
+            const response = await authenticatedFetch('/api/messages/sync', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                message: message,
+                deviceId: getDeviceId()
+              })
+            });
+            
+            if (!response.ok) {
+              console.error('消息同步失败:', await response.text());
+            } else {
+              console.log('消息成功同步到服务器');
+            }
           } catch (err) {
-            console.error('Error syncing message:', err);
+            console.error('消息同步错误:', err);
           }
         }
       }
