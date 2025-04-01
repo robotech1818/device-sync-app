@@ -1,42 +1,49 @@
 import jwt from '@tsndr/cloudflare-worker-jwt';
 import { handleLogin, getAuthToken, validateToken } from './auth';
-import { listFiles, handleFileUpload, downloadFile, syncFileStatus } from './files';
+import { 
+  listFiles, 
+  handleFileUpload, 
+  downloadFile, 
+  syncFileStatus, 
+  syncMessage, 
+  getMessages 
+} from './files';
 import { loginPageTemplate } from './templates/login';
 import { appPageTemplate } from './templates/app';
 
-// Worker入口函数
+// Worker entry function
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     const path = url.pathname;
     
-    // 路由配置
-    // 登录页面
+    // Route configuration
+    // Login page
     if (path === '/' || path === '/login') {
       return new Response(loginPageTemplate(), {
         headers: { 'Content-Type': 'text/html;charset=UTF-8' }
       });
     }
     
-    // 处理登录请求
+    // Handle login request
     if (path === '/api/login' && request.method === 'POST') {
       return handleLogin(request, env);
     }
     
-    // 以下路径都需要认证
+    // All paths below require authentication
     const token = getAuthToken(request);
     if (!token) {
-      return new Response('未授权: 缺少令牌', { status: 401 });
+      return new Response('Unauthorized: Token missing', { status: 401 });
     }
     
     try {
-      // 验证用户
+      // Validate user
       const username = await validateToken(token, env);
       if (!username) {
-        return new Response('未授权: 无效令牌', { status: 401 });
+        return new Response('Unauthorized: Invalid token', { status: 401 });
       }
       
-      // 路由API请求
+      // Route API requests
       if (path === '/api/files/list') {
         return listFiles(username, env);
       }
@@ -59,38 +66,47 @@ export default {
         return getFileChanges(since, username, env);
       }
       
-      // 应用主页
+      // New messaging endpoints
+      if (path === '/api/messages' && request.method === 'GET') {
+        return getMessages(username, env);
+      }
+      
+      if (path === '/api/messages/sync' && request.method === 'POST') {
+        return syncMessage(request, username, env);
+      }
+      
+      // App main page
       if (path === '/app') {
         return new Response(appPageTemplate(username), {
           headers: { 'Content-Type': 'text/html;charset=UTF-8' }
         });
       }
       
-      // 404 - 未找到路径
-      return new Response('未找到', { status: 404 });
+      // 404 - Path not found
+      return new Response('Not Found', { status: 404 });
     } catch (err) {
-      return new Response(`认证错误: ${err.message}`, { status: 401 });
+      return new Response(`Authentication error: ${err.message}`, { status: 401 });
     }
   }
 };
 
-// 获取文件变更 (用于轮询同步)
+// Get file changes (for polling sync)
 async function getFileChanges(since, username, env) {
   since = parseInt(since);
   
   try {
-    // 使用list获取含metadata的文件
+    // Use list to get files with metadata
     const prefix = `file:${username}:`;
     const metaPrefix = `${prefix}.*:meta`;
     
-    // 从KV获取所有文件元数据
+    // Get all file metadata from KV
     const filesList = await env.SYNC_KV.list({ prefix: metaPrefix });
     
     const changes = [];
     const promises = filesList.keys.map(async (key) => {
       const metadata = await env.SYNC_KV.get(key.name, 'json');
       if (metadata) {
-        // 转换lastModified为时间戳以便比较
+        // Convert lastModified to timestamp for comparison
         const modifiedTime = new Date(metadata.lastModified).getTime();
         if (modifiedTime > since) {
           changes.push(metadata);
@@ -109,7 +125,7 @@ async function getFileChanges(since, username, env) {
   } catch (err) {
     return new Response(JSON.stringify({
       success: false,
-      error: `获取文件变更失败: ${err.message}`
+      error: `Failed to get file changes: ${err.message}`
     }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' }
