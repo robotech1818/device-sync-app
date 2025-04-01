@@ -104,11 +104,14 @@ export function appPageTemplate(username) {
     </div>
     
     <script>
-      // 获取令牌
-      const token = localStorage.getItem('authToken');
-      if (!token) {
-        window.location.href = '/login';
-      }
+       // 获取令牌
+       const token = localStorage.getItem('authToken');
+       console.log('获取到的令牌:', token); // 添加这行来调试
+       
+       if (!token) {
+         console.error('未找到令牌，重定向到登录页');
+         window.location.href = '/login';
+       }
       
       // 通用的认证请求函数
       async function authenticatedFetch(url, options = {}) {
