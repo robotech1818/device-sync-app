@@ -98,17 +98,24 @@ export function loginPageTemplate() {
           
           const data = await response.json();
           
-          if (response.ok) {
-            // 存储令牌
-            localStorage.setItem('authToken', data.token);
-            // 重定向到应用页面
-            window.location.href = '/app';
-          } else {
-            // 显示错误信息
-            const errorEl = document.getElementById('errorMessage');
-            errorEl.textContent = data.error || '登录失败';
-            errorEl.style.display = 'block';
-          }
+         if (response.ok) {
+           const data = await response.json();
+           if (data.success && data.token) {
+             // 在这里添加日志
+             console.log('保存令牌:', data.token);
+             localStorage.setItem('authToken', data.token);
+             
+             // 确保在重定向前等待localStorage更新
+             setTimeout(() => {
+               window.location.href = '/app';
+             }, 100);
+           } else {
+             // 显示错误信息
+             const errorEl = document.getElementById('errorMessage');
+             errorEl.textContent = data.error || '登录失败: 无效响应';
+             errorEl.style.display = 'block';
+           }
+         }
         } catch (err) {
           console.error('登录错误:', err);
           const errorEl = document.getElementById('errorMessage');
