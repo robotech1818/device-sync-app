@@ -1,21 +1,24 @@
-// List user's files
 export async function listFiles(username, env) {
-  // Use KV list prefix functionality to get all user's files
+  console.log(`正在获取用户${username}的文件列表`);
+  // 使用KV的list前缀功能获取用户的所有文件
   const prefix = `file:${username}:`;
-  const fileMetaPrefix = `${prefix}.*:meta`; // Use .* to match all file IDs
+  const fileMetaPrefix = `${prefix}.*:meta`; // 使用.*匹配所有文件ID
   
   try {
     const files = await env.SYNC_KV.list({ prefix: fileMetaPrefix });
+    console.log(`KV返回的文件键数量: ${files.keys.length}`);
     
-    // Process file list
+    // 处理文件列表
     const fileList = [];
     for (const key of files.keys) {
+      console.log(`正在获取文件元数据: ${key.name}`);
       const metadata = await env.SYNC_KV.get(key.name, 'json');
       if (metadata) {
         fileList.push(metadata);
       }
     }
     
+    console.log(`总共找到${fileList.length}个文件`);
     return new Response(JSON.stringify({
       success: true,
       files: fileList
@@ -23,6 +26,7 @@ export async function listFiles(username, env) {
       headers: { 'Content-Type': 'application/json' }
     });
   } catch (err) {
+    console.error(`获取文件列表失败: ${err.message}`);
     return new Response(JSON.stringify({
       success: false,
       error: `Failed to get file list: ${err.message}`
