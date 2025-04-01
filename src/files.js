@@ -1,24 +1,32 @@
+// 在listFiles函数中
 export async function listFiles(username, env) {
-  console.log(`正在获取用户${username}的文件列表`);
+  console.log(`获取用户 ${username} 的文件列表`);
+  
   // 使用KV的list前缀功能获取用户的所有文件
   const prefix = `file:${username}:`;
-  const fileMetaPrefix = `${prefix}.*:meta`; // 使用.*匹配所有文件ID
+  const fileMetaPrefix = `${prefix}.*:meta`;
   
   try {
     const files = await env.SYNC_KV.list({ prefix: fileMetaPrefix });
-    console.log(`KV返回的文件键数量: ${files.keys.length}`);
+    console.log(`KV查询返回的键数量: ${files.keys.length}`);
+    console.log(`KV查询返回的键: ${JSON.stringify(files.keys.map(k => k.name))}`);
     
     // 处理文件列表
     const fileList = [];
     for (const key of files.keys) {
-      console.log(`正在获取文件元数据: ${key.name}`);
+      console.log(`获取文件元数据: ${key.name}`);
       const metadata = await env.SYNC_KV.get(key.name, 'json');
       if (metadata) {
+        console.log(`找到有效元数据: ${JSON.stringify(metadata)}`);
         fileList.push(metadata);
+      } else {
+        console.log(`元数据为空: ${key.name}`);
       }
     }
     
-    console.log(`总共找到${fileList.length}个文件`);
+    console.log(`总共返回 ${fileList.length} 个文件`);
+    
+    // 返回结果
     return new Response(JSON.stringify({
       success: true,
       files: fileList
@@ -26,7 +34,8 @@ export async function listFiles(username, env) {
       headers: { 'Content-Type': 'application/json' }
     });
   } catch (err) {
-    console.error(`获取文件列表失败: ${err.message}`);
+    console.error(`获取文件列表错误: ${err.message}`);
+    console.error(err.stack);
     return new Response(JSON.stringify({
       success: false,
       error: `Failed to get file list: ${err.message}`

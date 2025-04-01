@@ -387,37 +387,61 @@ export function appPageTemplate(username) {
       async function loadFiles() {
         try {
           console.log('正在获取文件列表...');
-          const response = await authenticatedFetch('/api/files/list');
           
-          // 检查认证状态
-          if (response.status === 401) {
-            console.error('认证失败，重定向到登录页面');
-            localStorage.removeItem('authToken');
-            window.location.href = '/login';
+          // 清除缓存的时间戳以确保获取最新数据
+          // 避免浏览器缓存导致的问题
+          const timestamp = new Date().getTime();
+          const response = await authenticatedFetch(`/api/files/list?_=${timestamp}`);
+          
+          if (!response.ok) {
+            console.error(`文件列表请求失败，状态码: ${response.status}`);
+            throw new Error(`Server responded with ${response.status}`);
+          }
+          
+          let data;
+          try {
+            const text = await response.text();
+            console.log('API返回原始数据:', text);
+            data = JSON.parse(text);
+          } catch (parseError) {
+            console.error('解析JSON响应失败:', parseError);
+            throw parseError;
+          }
+          
+          console.log('解析后的文件列表数据:', data);
+          
+          const fileListEl = document.getElementById('fileList');
+          if (!fileListEl) {
+            console.error('找不到fileList元素');
             return;
           }
           
-          const data = await response.json();
-          console.log('文件列表API返回数据:', data);
+          // 清空现有列表
+          fileListEl.innerHTML = '';
           
-          const fileListEl = document.getElementById('fileList');
+          if (!data.success) {
+            console.error('API返回失败:', data.error);
+            fileListEl.innerHTML = `<li class="file-item"><div class="file-info"><h3 class="file-name">Error: ${data.error || 'Unknown error'}</h3></div></li>`;
+            return;
+          }
           
-          if (!data.success || !data.files || data.files.length === 0) {
+          if (!data.files || !Array.isArray(data.files) || data.files.length === 0) {
             console.log('没有找到文件');
             fileListEl.innerHTML = '<li class="file-item"><div class="file-info"><h3 class="file-name">No files found</h3></div></li>';
             return;
           }
           
-          fileListEl.innerHTML = '';
-          console.log(`找到${data.files.length}个文件`);
+          console.log(`找到 ${data.files.length} 个文件，开始渲染`);
           
           // 按最近修改时间排序
           data.files.sort((a, b) => {
             return new Date(b.lastModified) - new Date(a.lastModified);
           });
           
-          data.files.forEach(file => {
-            console.log('渲染文件:', file.name);
+          // 渲染每个文件
+          data.files.forEach((file, index) => {
+            console.log(`渲染文件 ${index+1}/${data.files.length}: ${file.name}`);
+            
             const li = document.createElement('li');
             li.className = 'file-item';
             
@@ -426,11 +450,11 @@ export function appPageTemplate(username) {
             
             const fileName = document.createElement('h3');
             fileName.className = 'file-name';
-            fileName.textContent = file.name;
+            fileName.textContent = file.name || 'Unnamed File';
             
             const fileDetails = document.createElement('p');
             fileDetails.className = 'file-details';
-            fileDetails.textContent = `Type: ${file.type} | Size: ${formatFileSize(file.size)} | Modified: ${formatDate(file.lastModified)}`;
+            fileDetails.textContent = `Type: ${file.type || 'unknown'} | Size: ${formatFileSize(file.size || 0)} | Modified: ${formatDate(file.lastModified || new Date())}`;
             
             fileInfo.appendChild(fileName);
             fileInfo.appendChild(fileDetails);
@@ -455,6 +479,10 @@ export function appPageTemplate(username) {
           console.log('文件列表加载完成');
         } catch (err) {
           console.error('加载文件列表错误:', err);
+          const fileListEl = document.getElementById('fileList');
+          if (fileListEl) {
+            fileListEl.innerHTML = `<li class="file-item"><div class="file-info"><h3 class="file-name">Error loading files: ${err.message}</h3></div></li>`;
+          }
         }
       }
       
@@ -466,7 +494,13 @@ export function appPageTemplate(username) {
       // 上传文件
       async function uploadFile(file) {
         try {
-          console.log('开始上传文件:', file.name);
+          console.log('开始上传文件:', file.name, '大小:', file.size, '类型:', file.type);
+          
+          // 显示上传中提示
+          const dropzone = document.getElementById('dropzone');
+          const originalText = dropzone.innerHTML;
+          dropzone.innerHTML = '<p>Uploading... Please wait</p>';
+          
           const formData = new FormData();
           formData.append('file', file);
           
@@ -476,37 +510,129 @@ export function appPageTemplate(username) {
             body: formData
           });
           
-          // 检查认证状态
-          if (response.status === 401) {
-            console.error('认证失败，重定向到登录页面');
-            localStorage.removeItem('authToken');
-            window.location.href = '/login';
+          // 恢复原始提示
+          dropzone.innerHTML = originalText;
+          
+          // 检查响应状态
+          if (!response.ok) {
+            console.error(`上传失败，状态码: ${response.status}`);
+            alert(`Upload failed with status: ${response.status}`);
             return;
           }
           
-          const data = await response.json();
+          let data;
+          try {
+            const text = await response.text();
+            console.log('上传API返回原始数据:', text);
+            data = JSON.parse(text);
+          } catch (parseError) {
+            console.error('解析JSON响应失败:', parseError);
+            alert('Error parsing server response');
+            return;
+          }
+          
+          console.log('解析后的上传响应:', data);
           
           if (data.success) {
-            console.log('文件上传成功:', data);
+            console.log('文件上传成功:', data.fileId);
             
-            // 确保等待一小段时间后再加载文件列表，
-            // 让服务器有足够时间处理并保存文件
-            setTimeout(async () => {
-              console.log('刷新文件列表...');
-              await loadFiles(); 
-              console.log('文件列表已刷新');
-            }, 500);
-            
-            // 显示成功提示
+            // 显示成功通知
             alert('File uploaded successfully!');
+            
+            // 确保等待一小段时间后再重新加载文件列表
+            // 这有助于确保服务器有足够时间处理文件
+            console.log('延迟1秒后刷新文件列表...');
+            setTimeout(() => {
+              console.log('开始刷新文件列表');
+              loadFiles().then(() => {
+                console.log('文件列表刷新完成');
+              }).catch(err => {
+                console.error('刷新文件列表失败:', err);
+              });
+            }, 1000);
           } else {
             console.error('上传失败:', data.error);
-            alert(`Upload failed: ${data.error}`);
+            alert(`Upload failed: ${data.error || 'Unknown error'}`);
           }
         } catch (err) {
           console.error('上传文件错误:', err);
-          alert('An error occurred during upload');
+          alert(`Error during upload: ${err.message}`);
+          
+          // 恢复原始提示
+          const dropzone = document.getElementById('dropzone');
+          dropzone.innerHTML = '<p>Drag and drop files here or click to upload</p><input type="file" id="fileInput">';
+          
+          // 重新初始化文件输入框
+          const fileInput = document.getElementById('fileInput');
+          if (fileInput) {
+            fileInput.addEventListener('change', () => {
+              if (fileInput.files.length > 0) {
+                uploadFile(fileInput.files[0]);
+              }
+            });
+          }
         }
+      }
+
+      // 重新初始化拖放区域
+      function reinitializeDropzone() {
+        console.log('重新初始化拖放区域');
+        const dropzone = document.getElementById('dropzone');
+        const fileInput = document.getElementById('fileInput');
+        
+        if (!dropzone || !fileInput) {
+          console.error('找不到dropzone或fileInput元素');
+          return;
+        }
+        
+        // 移除所有现有事件监听器
+        const newDropzone = dropzone.cloneNode(true);
+        dropzone.parentNode.replaceChild(newDropzone, dropzone);
+        
+        const newFileInput = document.createElement('input');
+        newFileInput.type = 'file';
+        newFileInput.id = 'fileInput';
+        newFileInput.style.display = 'none';
+        
+        // 确保dropzone内容正确
+        newDropzone.innerHTML = '<p>Drag and drop files here or click to upload</p>';
+        newDropzone.appendChild(newFileInput);
+        
+        // 点击上传
+        newDropzone.addEventListener('click', () => {
+          newFileInput.click();
+        });
+        
+        newFileInput.addEventListener('change', () => {
+          if (newFileInput.files.length > 0) {
+            uploadFile(newFileInput.files[0]);
+          }
+        });
+        
+        // 拖放上传
+        newDropzone.addEventListener('dragover', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          newDropzone.classList.add('highlight');
+        });
+        
+        newDropzone.addEventListener('dragleave', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          newDropzone.classList.remove('highlight');
+        });
+        
+        newDropzone.addEventListener('drop', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          newDropzone.classList.remove('highlight');
+          
+          if (e.dataTransfer.files.length > 0) {
+            uploadFile(e.dataTransfer.files[0]);
+          }
+        });
+        
+        console.log('拖放区域重新初始化完成');
       }
       
       // Format file size
@@ -798,15 +924,32 @@ export function appPageTemplate(username) {
         window.location.href = '/login';
       });
       
-      // Initialize on page load
+      // 初始化页面
       window.addEventListener('load', () => {
-        loadFiles();
-        initDropzone();
-        initMessaging();
+        console.log('页面加载，开始初始化...');
+        
+        // 先加载文件列表
+        loadFiles().then(() => {
+          console.log('文件列表初始加载完成');
+        }).catch(err => {
+          console.error('初始文件列表加载失败:', err);
+        });
+        
+        // 初始化拖放区域
+        reinitializeDropzone();
+        
+        // 初始化消息功能
+        initMessaging().then(() => {
+          console.log('消息功能初始化完成');
+        }).catch(err => {
+          console.error('消息功能初始化失败:', err);
+        });
+        
+        // 开始轮询变更
         pollForChanges();
         
-        // Show device ID in console for testing
-        console.log('Current device ID:', getDeviceId());
+        // 显示设备ID
+        console.log('当前设备ID:', getDeviceId());
       });
     </script>
   </body>
