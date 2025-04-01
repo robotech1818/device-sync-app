@@ -1,13 +1,13 @@
-// 列出用户的文件
+// List user's files
 export async function listFiles(username, env) {
-  // 使用KV的list前缀功能获取用户的所有文件
+  // Use KV list prefix functionality to get all user's files
   const prefix = `file:${username}:`;
-  const fileMetaPrefix = `${prefix}.*:meta`; // 使用.*匹配所有文件ID
+  const fileMetaPrefix = `${prefix}.*:meta`; // Use .* to match all file IDs
   
   try {
     const files = await env.SYNC_KV.list({ prefix: fileMetaPrefix });
     
-    // 处理文件列表
+    // Process file list
     const fileList = [];
     for (const key of files.keys) {
       const metadata = await env.SYNC_KV.get(key.name, 'json');
@@ -25,7 +25,7 @@ export async function listFiles(username, env) {
   } catch (err) {
     return new Response(JSON.stringify({
       success: false,
-      error: `获取文件列表失败: ${err.message}`
+      error: `Failed to get file list: ${err.message}`
     }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' }
@@ -33,7 +33,7 @@ export async function listFiles(username, env) {
   }
 }
 
-// 处理文件上传
+// Handle file upload
 export async function handleFileUpload(request, username, env) {
   try {
     const formData = await request.formData();
@@ -42,28 +42,28 @@ export async function handleFileUpload(request, username, env) {
     if (!file) {
       return new Response(JSON.stringify({
         success: false,
-        error: '未提供文件'
+        error: 'No file provided'
       }), {
         status: 400,
         headers: { 'Content-Type': 'application/json' }
       });
     }
     
-    // 检查文件大小限制
-    if (file.size > 2 * 1024 * 1024) { // 2MB限制
+    // Check file size limit
+    if (file.size > 2 * 1024 * 1024) { // 2MB limit
       return new Response(JSON.stringify({
         success: false,
-        error: '文件大小超过2MB限制'
+        error: 'File size exceeds 2MB limit'
       }), {
         status: 400,
         headers: { 'Content-Type': 'application/json' }
       });
     }
     
-    // 生成唯一文件ID
+    // Generate unique file ID
     const fileId = `${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;
     
-    // 存储文件元数据
+    // Store file metadata
     const metadata = {
       id: fileId,
       name: file.name,
@@ -73,16 +73,16 @@ export async function handleFileUpload(request, username, env) {
       owner: username
     };
     
-    // 读取文件内容并保存到KV
+    // Read file content and save to KV
     const fileContent = await file.arrayBuffer();
     
-    // 存储文件内容
+    // Store file content
     await env.SYNC_KV.put(
       `file:${username}:${fileId}:content`,
       fileContent
     );
     
-    // 存储文件元数据
+    // Store file metadata
     await env.SYNC_KV.put(
       `file:${username}:${fileId}:meta`,
       JSON.stringify(metadata)
@@ -98,7 +98,7 @@ export async function handleFileUpload(request, username, env) {
   } catch (err) {
     return new Response(JSON.stringify({
       success: false,
-      error: `文件上传失败: ${err.message}`
+      error: `File upload failed: ${err.message}`
     }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' }
@@ -106,38 +106,38 @@ export async function handleFileUpload(request, username, env) {
   }
 }
 
-// 下载文件
+// Download file
 export async function downloadFile(fileId, username, env) {
   try {
-    // 获取文件元数据
+    // Get file metadata
     const metaKey = `file:${username}:${fileId}:meta`;
     const metadata = await env.SYNC_KV.get(metaKey, 'json');
     
     if (!metadata) {
       return new Response(JSON.stringify({
         success: false,
-        error: '文件不存在'
+        error: 'File not found'
       }), {
         status: 404,
         headers: { 'Content-Type': 'application/json' }
       });
     }
     
-    // 获取文件内容
+    // Get file content
     const contentKey = `file:${username}:${fileId}:content`;
     const fileContent = await env.SYNC_KV.get(contentKey, 'arrayBuffer');
     
     if (!fileContent) {
       return new Response(JSON.stringify({
         success: false,
-        error: '文件内容不存在'
+        error: 'File content not found'
       }), {
         status: 404,
         headers: { 'Content-Type': 'application/json' }
       });
     }
     
-    // 设置适当的响应头并返回文件
+    // Set appropriate response headers and return file
     return new Response(fileContent, {
       headers: {
         'Content-Type': metadata.type || 'application/octet-stream',
@@ -148,7 +148,7 @@ export async function downloadFile(fileId, username, env) {
   } catch (err) {
     return new Response(JSON.stringify({
       success: false,
-      error: `文件下载失败: ${err.message}`
+      error: `File download failed: ${err.message}`
     }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' }
@@ -156,7 +156,7 @@ export async function downloadFile(fileId, username, env) {
   }
 }
 
-// 同步文件状态
+// Sync file status
 export async function syncFileStatus(request, username, env) {
   try {
     const { fileId, lastModified, deviceId } = await request.json();
@@ -164,32 +164,32 @@ export async function syncFileStatus(request, username, env) {
     if (!fileId || !lastModified || !deviceId) {
       return new Response(JSON.stringify({
         success: false,
-        error: '缺少必要参数'
+        error: 'Missing required parameters'
       }), {
         status: 400,
         headers: { 'Content-Type': 'application/json' }
       });
     }
     
-    // 获取文件元数据
+    // Get file metadata
     const metaKey = `file:${username}:${fileId}:meta`;
     const metadata = await env.SYNC_KV.get(metaKey, 'json');
     
     if (!metadata) {
       return new Response(JSON.stringify({
         success: false,
-        error: '文件不存在'
+        error: 'File not found'
       }), {
         status: 404,
         headers: { 'Content-Type': 'application/json' }
       });
     }
     
-    // 更新最后修改时间
+    // Update last modified time
     metadata.lastModified = lastModified;
     metadata.lastSyncDevice = deviceId;
     
-    // 保存更新后的元数据
+    // Save updated metadata
     await env.SYNC_KV.put(metaKey, JSON.stringify(metadata));
     
     return new Response(JSON.stringify({
@@ -201,7 +201,122 @@ export async function syncFileStatus(request, username, env) {
   } catch (err) {
     return new Response(JSON.stringify({
       success: false,
-      error: `同步文件状态失败: ${err.message}`
+      error: `Sync file status failed: ${err.message}`
+    }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+}
+
+// Handle message synchronization
+export async function syncMessage(request, username, env) {
+  try {
+    const { message, deviceId } = await request.json();
+    
+    if (!message || !deviceId) {
+      return new Response(JSON.stringify({
+        success: false,
+        error: 'Missing required parameters'
+      }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+    
+    // Generate a unique message ID if not provided
+    if (!message.id) {
+      message.id = `${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;
+    }
+    
+    // Add timestamp if not provided
+    if (!message.timestamp) {
+      message.timestamp = new Date().toISOString();
+    }
+    
+    // Store message in KV
+    const messageKey = `message:${username}:${message.id}`;
+    const messageData = {
+      ...message,
+      deviceId,
+      owner: username
+    };
+    
+    await env.SYNC_KV.put(messageKey, JSON.stringify(messageData));
+    
+    // Get message list for this user to update
+    const listKey = `message_list:${username}`;
+    let messageList = await env.SYNC_KV.get(listKey, 'json') || [];
+    
+    // Add new message ID to list
+    messageList.push(message.id);
+    
+    // Limit to max number of messages (50)
+    const MAX_MESSAGES = 50;
+    if (messageList.length > MAX_MESSAGES) {
+      const messagesToDelete = messageList.slice(0, messageList.length - MAX_MESSAGES);
+      
+      // Delete old messages
+      for (const msgId of messagesToDelete) {
+        await env.SYNC_KV.delete(`message:${username}:${msgId}`);
+      }
+      
+      // Update message list
+      messageList = messageList.slice(messageList.length - MAX_MESSAGES);
+    }
+    
+    // Save updated message list
+    await env.SYNC_KV.put(listKey, JSON.stringify(messageList));
+    
+    return new Response(JSON.stringify({
+      success: true,
+      message: messageData
+    }), {
+      headers: { 'Content-Type': 'application/json' }
+    });
+  } catch (err) {
+    return new Response(JSON.stringify({
+      success: false,
+      error: `Message sync failed: ${err.message}`
+    }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+}
+
+// Get messages
+export async function getMessages(username, env) {
+  try {
+    // Get message list
+    const listKey = `message_list:${username}`;
+    const messageList = await env.SYNC_KV.get(listKey, 'json') || [];
+    
+    // Fetch all messages
+    const messages = [];
+    for (const msgId of messageList) {
+      const messageKey = `message:${username}:${msgId}`;
+      const messageData = await env.SYNC_KV.get(messageKey, 'json');
+      if (messageData) {
+        messages.push(messageData);
+      }
+    }
+    
+    // Sort by timestamp
+    messages.sort((a, b) => {
+      return new Date(a.timestamp) - new Date(b.timestamp);
+    });
+    
+    return new Response(JSON.stringify({
+      success: true,
+      messages: messages
+    }), {
+      headers: { 'Content-Type': 'application/json' }
+    });
+  } catch (err) {
+    return new Response(JSON.stringify({
+      success: false,
+      error: `Failed to get messages: ${err.message}`
     }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' }
