@@ -24,11 +24,9 @@ jobs:
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CF_API_TOKEN }}
-          workingDirectory: '.'  # 指定工作目录
-          command: deploy --name device-sync-app  # 明确指定Worker名称
+          # 修改secrets格式
           secrets: |
-            JWT_SECRET
-            VALID_PASSWORD
+            JWT_SECRET=${{ secrets.JWT_SECRET }}
+            VALID_PASSWORD=${{ secrets.VALID_PASSWORD }}
         env:
-          JWT_SECRET: ${{ secrets.JWT_SECRET }}
-          VALID_PASSWORD: ${{ secrets.VALID_PASSWORD }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
