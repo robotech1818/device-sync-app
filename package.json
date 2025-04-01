@@ -1,0 +1,16 @@
+{
+  "name": "device-sync-app",
+  "version": "1.0.0",
+  "description": "多设备文件同步应用",
+  "main": "src/index.js",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "dependencies": {
+    "@tsndr/cloudflare-worker-jwt": "^2.4.5"
+  },
+  "devDependencies": {
+    "wrangler": "^3.37.0"
+  }
+}
