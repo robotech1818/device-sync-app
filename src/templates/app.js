@@ -235,12 +235,45 @@ export function appPageTemplate(username) {
         outline: none;
         border-color: var(--primary-color);
       }
+
+      // 在现有样式后添加右键菜单相关样式
+      .context-menu {
+        position: fixed;
+        z-index: 1000;
+        background: white;
+        border-radius: 5px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+        overflow: hidden;
+      }
+
+      .context-menu-item {
+        padding: 8px 15px;
+        cursor: pointer;
+        transition: background 0.2s;
+      }
+
+      .context-menu-item:hover {
+        background: var(--secondary-color);
+      }
       
       /* Responsive */
       @media (max-width: 768px) {
         .container {
           grid-template-columns: 1fr;
         }
+      }
+
+      // 在现有样式中添加
+      #toast {
+        position: fixed;
+        bottom: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        padding: 8px 16px;
+        background-color: rgba(0, 0, 0, 0.7);
+        color: white;
+        border-radius: 4px;
+        z-index: 1001;
       }
     </style>
   </head>
@@ -780,6 +813,7 @@ export function appPageTemplate(username) {
       }
       
       // Render messages in UI
+      // 渲染消息 UI
       function renderMessages(messages) {
         const deviceId = getDeviceId();
         const messageList = document.getElementById('messageList');
@@ -788,13 +822,13 @@ export function appPageTemplate(username) {
         if (messages.length === 0) {
           const emptyItem = document.createElement('li');
           emptyItem.className = 'message-item other';
-          emptyItem.innerHTML = \`
+          emptyItem.innerHTML = `
             <div class="message-header">
               <span>System</span>
-              <span>\${formatDate(new Date().toISOString())}</span>
+              <span>${formatDate(new Date().toISOString())}</span>
             </div>
             <div class="message-content">No messages yet. Start the conversation!</div>
-          \`;
+          `;
           messageList.appendChild(emptyItem);
           return;
         }
@@ -803,21 +837,117 @@ export function appPageTemplate(username) {
           const messageItem = document.createElement('li');
           const isSelf = msg.deviceId === deviceId;
           
-          messageItem.className = \`message-item \${isSelf ? 'self' : 'other'}\`;
+          messageItem.className = `message-item ${isSelf ? 'self' : 'other'}`;
+          messageItem.dataset.messageText = msg.text; // 将消息文本存储在数据属性中，用于复制
           
-          messageItem.innerHTML = \`
+          messageItem.innerHTML = `
             <div class="message-header">
-              <span>\${isSelf ? 'You (This Device)' : 'Device ' + msg.deviceId.substring(0, 8)}</span>
-              <span>\${formatDate(msg.timestamp)}</span>
+              <span>${isSelf ? 'You (This Device)' : 'Device ' + msg.deviceId.substring(0, 8)}</span>
+              <span>${formatDate(msg.timestamp)}</span>
             </div>
-            <div class="message-content">\${escapeHTML(msg.text)}</div>
-          \`;
+            <div class="message-content">${escapeHTML(msg.text)}</div>
+          `;
+          
+          // 添加右键菜单事件
+          messageItem.addEventListener('contextmenu', function(e) {
+            e.preventDefault();
+            showContextMenu(e, messageItem.dataset.messageText);
+          });
           
           messageList.appendChild(messageItem);
         });
         
-        // Scroll to bottom
+        // 滚动到底部
         messageList.scrollTop = messageList.scrollHeight;
+      }
+
+      // 显示右键菜单
+      function showContextMenu(event, messageText) {
+        event.preventDefault();
+        
+        // 删除任何现有的右键菜单
+        removeContextMenu();
+        
+        // 创建菜单
+        const menu = document.createElement('div');
+        menu.id = 'context-menu';
+        menu.className = 'context-menu';
+        
+        // 创建复制选项
+        const copyItem = document.createElement('div');
+        copyItem.className = 'context-menu-item';
+        copyItem.textContent = 'Copy message';
+        copyItem.addEventListener('click', () => {
+          copyToClipboard(messageText);
+          removeContextMenu();
+        });
+        
+        // 添加菜单项到菜单
+        menu.appendChild(copyItem);
+        
+        // 设置菜单位置
+        menu.style.left = `${event.pageX}px`;
+        menu.style.top = `${event.pageY}px`;
+        
+        // 添加到文档
+        document.body.appendChild(menu);
+        
+        // 点击其他区域关闭菜单
+        document.addEventListener('click', removeContextMenu);
+      }
+
+      // 删除右键菜单
+      function removeContextMenu() {
+        const menu = document.getElementById('context-menu');
+        if (menu) {
+          menu.remove();
+        }
+        document.removeEventListener('click', removeContextMenu);
+      }
+
+      // 复制到剪贴板
+      function copyToClipboard(text) {
+        navigator.clipboard.writeText(text)
+          .then(() => {
+            // 显示复制成功提示
+            showToast('Copied to clipboard!');
+          })
+          .catch(err => {
+            console.error('Failed to copy text: ', err);
+            // 显示复制失败提示
+            showToast('Failed to copy text');
+          });
+      }
+
+      // 显示提示信息
+      function showToast(message) {
+        // 删除现有的提示
+        const existingToast = document.getElementById('toast');
+        if (existingToast) {
+          existingToast.remove();
+        }
+        
+        // 创建新提示
+        const toast = document.createElement('div');
+        toast.id = 'toast';
+        toast.textContent = message;
+        toast.style.position = 'fixed';
+        toast.style.bottom = '20px';
+        toast.style.left = '50%';
+        toast.style.transform = 'translateX(-50%)';
+        toast.style.padding = '8px 16px';
+        toast.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
+        toast.style.color = 'white';
+        toast.style.borderRadius = '4px';
+        toast.style.zIndex = '1001';
+        
+        // 添加到文档
+        document.body.appendChild(toast);
+        
+        // 3秒后自动消失
+        setTimeout(() => {
+          toast.remove();
+        }, 3000);
       }
       
       // Escape HTML to prevent XSS
