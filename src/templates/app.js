@@ -377,7 +377,7 @@ export function appPageTemplate(username) {
         if (token) {
           localStorage.setItem('authToken', token);
           if (!document.cookie.includes('authToken=')) {
-            document.cookie = \`authToken=\${token}; path=/; max-age=86400; SameSite=Strict\`;
+            document.cookie = "authToken=" + token + "; path=/; max-age=86400; SameSite=Strict";
           }
           
           // Remove token from URL (optional)
@@ -885,8 +885,8 @@ export function appPageTemplate(username) {
         menu.appendChild(copyItem);
         
         // 设置菜单位置
-        menu.style.left = `${event.pageX}px`;
-        menu.style.top = `${event.pageY}px`;
+        menu.style.left = event.pageX + "px";
+        menu.style.top = event.pageY + "px";
         
         // 添加到文档
         document.body.appendChild(menu);
