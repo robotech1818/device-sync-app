@@ -57,7 +57,7 @@ export function appPageTemplate(username) {
         align-items: center;
       }
       .file-info {
-        flex: Il;
+        flex: 1;
       }
       .file-actions button {
         margin-left: 10px;
@@ -227,4 +227,87 @@ export function appPageTemplate(username) {
           fileInput.click();
         });
         
-        fileInput.addEventListener('change', () =>
+        fileInput.addEventListener('change', () => {
+          if (fileInput.files.length > 0) {
+            uploadFile(fileInput.files[0]);
+          }
+        });
+        
+        // 拖放上传
+        dropzone.addEventListener('dragover', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          dropzone.classList.add('highlight');
+        });
+        
+        dropzone.addEventListener('dragleave', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          dropzone.classList.remove('highlight');
+        });
+        
+        dropzone.addEventListener('drop', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          dropzone.classList.remove('highlight');
+          
+          if (e.dataTransfer.files.length > 0) {
+            uploadFile(e.dataTransfer.files[0]);
+          }
+        });
+      }
+      
+      // 轮询文件变更
+      function pollForChanges() {
+        // 每5秒检查一次更改
+        setInterval(async () => {
+          try {
+            // 获取上次同步时间
+            const lastSync = localStorage.getItem('lastSyncTime') || 0;
+            
+            // 请求新文件和更改
+            const response = await authenticatedFetch('/api/files/changes?since=' + lastSync);
+            
+            if (response.ok) {
+              const data = await response.json();
+              if (data.success && data.changes.length > 0) {
+                // 有新变更，重新加载文件列表
+                loadFiles();
+              }
+            }
+          } catch (error) {
+            console.error('同步错误:', error);
+          }
+        }, 5000);
+      }
+      
+      // 设备ID标识
+      function getDeviceId() {
+        let deviceId = localStorage.getItem('deviceId');
+        if (!deviceId) {
+          deviceId = 'device-' + Date.now() + '-' + Math.random().toString(36).substring(2, 10);
+          localStorage.setItem('deviceId', deviceId);
+        }
+        return deviceId;
+      }
+      
+      // 退出登录
+      document.getElementById('logoutBtn').addEventListener('click', () => {
+        localStorage.removeItem('authToken');
+        window.location.href = '/login';
+      });
+      
+      // 页面加载时初始化
+      window.addEventListener('load', () => {
+        loadFiles();
+        initDropzone();
+        pollForChanges();
+        
+        // 在控制台显示设备ID，便于测试
+        console.log('当前设备ID:', getDeviceId());
+      });
+    </script>
+  </body>
+  </html>
+  `;
+}
