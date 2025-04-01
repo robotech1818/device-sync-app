@@ -456,7 +456,8 @@ export function appPageTemplate(username) {
       function downloadFile(fileId) {
         window.open(\`/api/files/download/\${fileId}?token=\${token}\`);
       }
-            
+      
+      // Upload file
       async function uploadFile(file) {
         try {
           const formData = new FormData();
@@ -483,11 +484,11 @@ export function appPageTemplate(username) {
             loadFiles(); // 重新加载文件列表
           } else {
             console.error('上传失败:', data.error);
-            alert(`上传失败: ${data.error}`);
+            alert(\`Upload failed: \${data.error}\`);
           }
         } catch (err) {
           console.error('上传文件错误:', err);
-          alert('上传过程中发生错误');
+          alert('An error occurred during upload');
         }
       }
       
@@ -547,7 +548,8 @@ export function appPageTemplate(username) {
       // Messages management
       const MAX_MESSAGES = 50; // Maximum number of messages to store
       
-      function initMessaging() {
+      // 初始化消息功能
+      async function initMessaging() {
         const messageForm = document.getElementById('messageForm');
         const messageInput = document.getElementById('messageInput');
         const messageList = document.getElementById('messageList');
@@ -571,7 +573,7 @@ export function appPageTemplate(username) {
         
         // 清除消息事件处理
         clearMessagesBtn.addEventListener('click', async () => {
-          if (confirm('确定要清除所有消息吗？')) {
+          if (confirm('Are you sure you want to clear all messages?')) {
             localStorage.removeItem('syncMessages');
             try {
               // 也清除服务器上的消息
@@ -584,148 +586,151 @@ export function appPageTemplate(username) {
             renderMessages([]);
           }
         });
-        
-        // 从服务器加载消息并与本地消息合并
-        async function loadAndMergeServerMessages(localMessages) {
-          try {
-            const response = await authenticatedFetch('/api/messages');
-            if (response.ok) {
-              const data = await response.json();
-              if (data.success && data.messages) {
-                // 合并本地和服务器消息，避免重复
-                const serverMessages = data.messages;
-                const allMessages = [...localMessages];
-                
-                // 添加服务器上有但本地没有的消息
-                serverMessages.forEach(serverMsg => {
-                  if (!allMessages.some(localMsg => localMsg.id === serverMsg.id)) {
-                    allMessages.push(serverMsg);
-                  }
-                });
-                
-                // 按时间排序
-                allMessages.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-                
-                // 保存合并后的消息
-                localStorage.setItem('syncMessages', JSON.stringify(allMessages));
-                renderMessages(allMessages);
-              } else {
-                renderMessages(localMessages);
-              }
+      }
+      
+      // 从服务器加载消息并与本地消息合并
+      async function loadAndMergeServerMessages(localMessages) {
+        try {
+          const response = await authenticatedFetch('/api/messages');
+          if (response.ok) {
+            const data = await response.json();
+            if (data.success && data.messages) {
+              // 合并本地和服务器消息，避免重复
+              const serverMessages = data.messages;
+              const allMessages = [...localMessages];
+              
+              // 添加服务器上有但本地没有的消息
+              serverMessages.forEach(serverMsg => {
+                if (!allMessages.some(localMsg => localMsg.id === serverMsg.id)) {
+                  allMessages.push(serverMsg);
+                }
+              });
+              
+              // 按时间排序
+              allMessages.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+              
+              // 保存合并后的消息
+              localStorage.setItem('syncMessages', JSON.stringify(allMessages));
+              renderMessages(allMessages);
             } else {
               renderMessages(localMessages);
             }
-          } catch (err) {
-            console.error('加载服务器消息失败:', err);
+          } else {
             renderMessages(localMessages);
           }
+        } catch (err) {
+          console.error('加载服务器消息失败:', err);
+          renderMessages(localMessages);
+        }
+      }
+      
+      // 发送新消息
+      async function sendMessage(text) {
+        const deviceId = getDeviceId();
+        const message = {
+          id: Date.now() + Math.random().toString(36).substring(2, 9),
+          deviceId: deviceId,
+          text: text,
+          timestamp: new Date().toISOString()
+        };
+        
+        // 添加到localStorage
+        const messages = JSON.parse(localStorage.getItem('syncMessages') || '[]');
+        messages.push(message);
+        
+        // 限制消息数量
+        if (messages.length > MAX_MESSAGES) {
+          messages.splice(0, messages.length - MAX_MESSAGES);
         }
         
-        // Load messages from localStorage
-        function loadMessages() {
-          const messages = JSON.parse(localStorage.getItem('syncMessages') || '[]');
-          renderMessages(messages);
-        }
+        localStorage.setItem('syncMessages', JSON.stringify(messages));
         
-        async function sendMessage(text) {
-          const deviceId = getDeviceId();
-          const message = {
-            id: Date.now() + Math.random().toString(36).substring(2, 9),
-            deviceId: deviceId,
-            text: text,
-            timestamp: new Date().toISOString()
-          };
-          
-          // 添加到localStorage
-          const messages = JSON.parse(localStorage.getItem('syncMessages') || '[]');
-          messages.push(message);
-          
-          // 限制消息数量
-          if (messages.length > MAX_MESSAGES) {
-            messages.splice(0, messages.length - MAX_MESSAGES);
-          }
-          
-          localStorage.setItem('syncMessages', JSON.stringify(messages));
-          
-          // 更新UI
-          renderMessages(messages);
-          
-          // 同步到服务器
-          await syncMessageToServer(message);
-        }
+        // 更新UI
+        renderMessages(messages);
         
-        // Render messages in UI
-        function renderMessages(messages) {
-          const deviceId = getDeviceId();
-          messageList.innerHTML = '';
-          
-          if (messages.length === 0) {
-            const emptyItem = document.createElement('li');
-            emptyItem.className = 'message-item other';
-            emptyItem.innerHTML = \`
-              <div class="message-header">
-                <span>System</span>
-                <span>\${formatDate(new Date().toISOString())}</span>
-              </div>
-              <div class="message-content">No messages yet. Start the conversation!</div>
-            \`;
-            messageList.appendChild(emptyItem);
-            return;
-          }
-          
-          messages.forEach(msg => {
-            const messageItem = document.createElement('li');
-            const isSelf = msg.deviceId === deviceId;
-            
-            messageItem.className = \`message-item \${isSelf ? 'self' : 'other'}\`;
-            
-            messageItem.innerHTML = \`
-              <div class="message-header">
-                <span>\${isSelf ? 'You (This Device)' : 'Device ' + msg.deviceId.substring(0, 8)}</span>
-                <span>\${formatDate(msg.timestamp)}</span>
-              </div>
-              <div class="message-content">\${escapeHTML(msg.text)}</div>
-            \`;
-            
-            messageList.appendChild(messageItem);
+        // 同步到服务器
+        await syncMessageToServer(message);
+      }
+      
+      // 同步消息到服务器
+      async function syncMessageToServer(message) {
+        try {
+          const response = await authenticatedFetch('/api/messages/sync', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              message: message,
+              deviceId: getDeviceId()
+            })
           });
           
-          // Scroll to bottom
-          messageList.scrollTop = messageList.scrollHeight;
-        }
-        
-        // Escape HTML to prevent XSS
-        function escapeHTML(text) {
-          return text
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;')
-            .replace(/'/g, '&#039;');
-        }
-        
-        async function syncMessageToServer(message) {
-          try {
-            const response = await authenticatedFetch('/api/messages/sync', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json'
-              },
-              body: JSON.stringify({
-                message: message,
-                deviceId: getDeviceId()
-              })
-            });
-            
-            if (!response.ok) {
-              console.error('消息同步失败:', await response.text());
-            } else {
-              console.log('消息成功同步到服务器');
-            }
-          } catch (err) {
-            console.error('消息同步错误:', err);
+          if (!response.ok) {
+            console.error('消息同步失败:', await response.text());
+          } else {
+            console.log('消息成功同步到服务器');
           }
+        } catch (err) {
+          console.error('消息同步错误:', err);
         }
+      }
+      
+      // Load messages
+      function loadMessages() {
+        const messages = JSON.parse(localStorage.getItem('syncMessages') || '[]');
+        renderMessages(messages);
+      }
+      
+      // Render messages in UI
+      function renderMessages(messages) {
+        const deviceId = getDeviceId();
+        const messageList = document.getElementById('messageList');
+        messageList.innerHTML = '';
+        
+        if (messages.length === 0) {
+          const emptyItem = document.createElement('li');
+          emptyItem.className = 'message-item other';
+          emptyItem.innerHTML = \`
+            <div class="message-header">
+              <span>System</span>
+              <span>\${formatDate(new Date().toISOString())}</span>
+            </div>
+            <div class="message-content">No messages yet. Start the conversation!</div>
+          \`;
+          messageList.appendChild(emptyItem);
+          return;
+        }
+        
+        messages.forEach(msg => {
+          const messageItem = document.createElement('li');
+          const isSelf = msg.deviceId === deviceId;
+          
+          messageItem.className = \`message-item \${isSelf ? 'self' : 'other'}\`;
+          
+          messageItem.innerHTML = \`
+            <div class="message-header">
+              <span>\${isSelf ? 'You (This Device)' : 'Device ' + msg.deviceId.substring(0, 8)}</span>
+              <span>\${formatDate(msg.timestamp)}</span>
+            </div>
+            <div class="message-content">\${escapeHTML(msg.text)}</div>
+          \`;
+          
+          messageList.appendChild(messageItem);
+        });
+        
+        // Scroll to bottom
+        messageList.scrollTop = messageList.scrollHeight;
+      }
+      
+      // Escape HTML to prevent XSS
+      function escapeHTML(text) {
+        return text
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#039;');
       }
       
       // Poll for file changes
