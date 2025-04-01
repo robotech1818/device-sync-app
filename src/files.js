@@ -33,6 +33,36 @@ export async function listFiles(username, env) {
   }
 }
 
+export async function clearMessages(username, env) {
+  try {
+    // 获取消息列表
+    const listKey = `message_list:${username}`;
+    const messageList = await env.SYNC_KV.get(listKey, 'json') || [];
+    
+    // 删除所有消息
+    for (const msgId of messageList) {
+      await env.SYNC_KV.delete(`message:${username}:${msgId}`);
+    }
+    
+    // 清空消息列表
+    await env.SYNC_KV.put(listKey, JSON.stringify([]));
+    
+    return new Response(JSON.stringify({
+      success: true
+    }), {
+      headers: { 'Content-Type': 'application/json' }
+    });
+  } catch (err) {
+    return new Response(JSON.stringify({
+      success: false,
+      error: `清除消息失败: ${err.message}`
+    }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+}
+
 // Handle file upload
 export async function handleFileUpload(request, username, env) {
   try {
