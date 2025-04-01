@@ -235,8 +235,8 @@ export function appPageTemplate(username) {
         outline: none;
         border-color: var(--primary-color);
       }
-
-      // 在现有样式后添加右键菜单相关样式
+      
+      /* Context Menu Styles */
       .context-menu {
         position: fixed;
         z-index: 1000;
@@ -245,25 +245,18 @@ export function appPageTemplate(username) {
         box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
         overflow: hidden;
       }
-
+      
       .context-menu-item {
         padding: 8px 15px;
         cursor: pointer;
         transition: background 0.2s;
       }
-
+      
       .context-menu-item:hover {
         background: var(--secondary-color);
       }
       
-      /* Responsive */
-      @media (max-width: 768px) {
-        .container {
-          grid-template-columns: 1fr;
-        }
-      }
-
-      // 在现有样式中添加
+      /* Toast Message */
       #toast {
         position: fixed;
         bottom: 20px;
@@ -274,6 +267,13 @@ export function appPageTemplate(username) {
         color: white;
         border-radius: 4px;
         z-index: 1001;
+      }
+      
+      /* Responsive */
+      @media (max-width: 768px) {
+        .container {
+          grid-template-columns: 1fr;
+        }
       }
     </style>
   </head>
@@ -570,7 +570,7 @@ export function appPageTemplate(username) {
             console.log('文件上传成功:', data.fileId);
             
             // 显示成功通知
-            alert('File uploaded successfully!');
+            showToast('File uploaded successfully!');
             
             // 确保等待一小段时间后再重新加载文件列表
             // 这有助于确保服务器有足够时间处理文件
@@ -812,7 +812,6 @@ export function appPageTemplate(username) {
         }
       }
       
-      // Render messages in UI
       // 渲染消息 UI
       function renderMessages(messages) {
         const deviceId = getDeviceId();
@@ -822,13 +821,13 @@ export function appPageTemplate(username) {
         if (messages.length === 0) {
           const emptyItem = document.createElement('li');
           emptyItem.className = 'message-item other';
-          emptyItem.innerHTML = `
+          emptyItem.innerHTML = \`
             <div class="message-header">
               <span>System</span>
-              <span>${formatDate(new Date().toISOString())}</span>
+              <span>\${formatDate(new Date().toISOString())}</span>
             </div>
             <div class="message-content">No messages yet. Start the conversation!</div>
-          `;
+          \`;
           messageList.appendChild(emptyItem);
           return;
         }
@@ -837,16 +836,16 @@ export function appPageTemplate(username) {
           const messageItem = document.createElement('li');
           const isSelf = msg.deviceId === deviceId;
           
-          messageItem.className = `message-item ${isSelf ? 'self' : 'other'}`;
+          messageItem.className = \`message-item \${isSelf ? 'self' : 'other'}\`;
           messageItem.dataset.messageText = msg.text; // 将消息文本存储在数据属性中，用于复制
           
-          messageItem.innerHTML = `
+          messageItem.innerHTML = \`
             <div class="message-header">
-              <span>${isSelf ? 'You (This Device)' : 'Device ' + msg.deviceId.substring(0, 8)}</span>
-              <span>${formatDate(msg.timestamp)}</span>
+              <span>\${isSelf ? 'You (This Device)' : 'Device ' + msg.deviceId.substring(0, 8)}</span>
+              <span>\${formatDate(msg.timestamp)}</span>
             </div>
-            <div class="message-content">${escapeHTML(msg.text)}</div>
-          `;
+            <div class="message-content">\${escapeHTML(msg.text)}</div>
+          \`;
           
           // 添加右键菜单事件
           messageItem.addEventListener('contextmenu', function(e) {
@@ -860,7 +859,7 @@ export function appPageTemplate(username) {
         // 滚动到底部
         messageList.scrollTop = messageList.scrollHeight;
       }
-
+      
       // 显示右键菜单
       function showContextMenu(event, messageText) {
         event.preventDefault();
@@ -895,7 +894,7 @@ export function appPageTemplate(username) {
         // 点击其他区域关闭菜单
         document.addEventListener('click', removeContextMenu);
       }
-
+      
       // 删除右键菜单
       function removeContextMenu() {
         const menu = document.getElementById('context-menu');
@@ -904,7 +903,7 @@ export function appPageTemplate(username) {
         }
         document.removeEventListener('click', removeContextMenu);
       }
-
+      
       // 复制到剪贴板
       function copyToClipboard(text) {
         navigator.clipboard.writeText(text)
@@ -918,7 +917,7 @@ export function appPageTemplate(username) {
             showToast('Failed to copy text');
           });
       }
-
+      
       // 显示提示信息
       function showToast(message) {
         // 删除现有的提示
@@ -931,15 +930,6 @@ export function appPageTemplate(username) {
         const toast = document.createElement('div');
         toast.id = 'toast';
         toast.textContent = message;
-        toast.style.position = 'fixed';
-        toast.style.bottom = '20px';
-        toast.style.left = '50%';
-        toast.style.transform = 'translateX(-50%)';
-        toast.style.padding = '8px 16px';
-        toast.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
-        toast.style.color = 'white';
-        toast.style.borderRadius = '4px';
-        toast.style.zIndex = '1001';
         
         // 添加到文档
         document.body.appendChild(toast);
@@ -1001,7 +991,7 @@ export function appPageTemplate(username) {
         return deviceId;
       }
       
-// Logout
+      // Logout
       document.getElementById('logoutBtn').addEventListener('click', () => {
         localStorage.removeItem('authToken');
         document.cookie = 'authToken=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
