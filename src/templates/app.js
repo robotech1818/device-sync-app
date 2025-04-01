@@ -884,7 +884,7 @@ export function appPageTemplate(username) {
         // 添加菜单项到菜单
         menu.appendChild(copyItem);
         
-        // 设置菜单位置
+        // 设置菜单位置（使用字符串拼接而不是模板字符串）
         menu.style.left = event.pageX + "px";
         menu.style.top = event.pageY + "px";
         
@@ -906,16 +906,52 @@ export function appPageTemplate(username) {
       
       // 复制到剪贴板
       function copyToClipboard(text) {
-        navigator.clipboard.writeText(text)
-          .then(() => {
-            // 显示复制成功提示
+        // 方法1：使用Clipboard API（现代浏览器）
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text)
+            .then(() => {
+              showToast('Copied to clipboard!');
+            })
+            .catch(err => {
+              console.error('Clipboard API失败:', err);
+              // 失败时尝试备用方法
+              fallbackCopyToClipboard(text);
+            });
+        } else {
+          // 方法2：回退到传统方法
+          fallbackCopyToClipboard(text);
+        }
+      }
+
+      // 传统的复制方法
+      function fallbackCopyToClipboard(text) {
+        try {
+          // 创建一个临时textarea元素
+          const textArea = document.createElement('textarea');
+          textArea.value = text;
+          
+          // 设置样式使其不可见
+          textArea.style.position = 'fixed';
+          textArea.style.left = '-999999px';
+          textArea.style.top = '-999999px';
+          document.body.appendChild(textArea);
+          
+          // 选择文本并复制
+          textArea.focus();
+          textArea.select();
+          
+          const successful = document.execCommand('copy');
+          document.body.removeChild(textArea);
+          
+          if (successful) {
             showToast('Copied to clipboard!');
-          })
-          .catch(err => {
-            console.error('Failed to copy text: ', err);
-            // 显示复制失败提示
+          } else {
             showToast('Failed to copy text');
-          });
+          }
+        } catch (err) {
+          console.error('传统复制方法失败:', err);
+          showToast('Failed to copy text');
+        }
       }
       
       // 显示提示信息
