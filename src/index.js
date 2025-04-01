@@ -6,7 +6,8 @@ import {
   downloadFile, 
   syncFileStatus, 
   syncMessage, 
-  getMessages 
+  getMessages,
+  clearMessages // 新增导入这个函数
 } from './files';
 import { loginPageTemplate } from './templates/login';
 import { appPageTemplate } from './templates/app';
@@ -80,6 +81,11 @@ export default {
         return new Response(appPageTemplate(username), {
           headers: { 'Content-Type': 'text/html;charset=UTF-8' }
         });
+      }
+      
+      // 新增清除消息端点
+      if (path === '/api/messages/clear' && request.method === 'POST') {
+        return clearMessages(username, env);
       }
       
       // 404 - Path not found
