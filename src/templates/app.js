@@ -104,14 +104,35 @@ export function appPageTemplate(username) {
     </div>
     
     <script>
-       // 获取令牌
-       const token = localStorage.getItem('authToken');
-       console.log('获取到的令牌:', token); // 添加这行来调试
-       
-       if (!token) {
-         console.error('未找到令牌，重定向到登录页');
-         window.location.href = '/login';
-       }
+      // 从URL参数和localStorage中获取令牌
+      function getTokenFromUrl() {
+        const urlParams = new URLSearchParams(window.location.search);
+        return urlParams.get('token');
+      }
+      
+      // 获取令牌，优先从URL获取，然后从localStorage获取
+      const urlToken = getTokenFromUrl();
+      let token = urlToken;
+      
+      if (!token) {
+        token = localStorage.getItem('authToken');
+      } else {
+        // 如果从URL获取到令牌，也存储到localStorage中
+        localStorage.setItem('authToken', token);
+        
+        // 清除URL中的令牌参数（可选）
+        if (history.pushState) {
+          const newUrl = window.location.pathname;
+          window.history.pushState({path: newUrl}, '', newUrl);
+        }
+      }
+      
+      console.log('当前令牌状态:', !!token);
+      
+      if (!token) {
+        console.error('未找到认证令牌，重定向到登录页面');
+        window.location.href = '/login';
+      }
       
       // 通用的认证请求函数
       async function authenticatedFetch(url, options = {}) {
@@ -124,6 +145,15 @@ export function appPageTemplate(username) {
       async function loadFiles() {
         try {
           const response = await authenticatedFetch('/api/files/list');
+          
+          // 检查认证状态
+          if (response.status === 401) {
+            console.error('认证失败，重定向到登录页面');
+            localStorage.removeItem('authToken');
+            window.location.href = '/login';
+            return;
+          }
+          
           const data = await response.json();
           
           const fileListEl = document.getElementById('fileList');
@@ -193,6 +223,14 @@ export function appPageTemplate(username) {
             method: 'POST',
             body: formData
           });
+          
+          // 检查认证状态
+          if (response.status === 401) {
+            console.error('认证失败，重定向到登录页面');
+            localStorage.removeItem('authToken');
+            window.location.href = '/login';
+            return;
+          }
           
           const data = await response.json();
           
@@ -270,6 +308,13 @@ export function appPageTemplate(username) {
             
             // 请求新文件和更改
             const response = await authenticatedFetch('/api/files/changes?since=' + lastSync);
+            
+            if (response.status === 401) {
+              console.error('令牌过期，重定向到登录页面');
+              localStorage.removeItem('authToken');
+              window.location.href = '/login';
+              return;
+            }
             
             if (response.ok) {
               const data = await response.json();
