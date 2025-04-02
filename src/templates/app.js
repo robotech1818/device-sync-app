@@ -915,7 +915,7 @@ export function appPageTemplate(username) {
         }
       }
       
-      // 删除消息
+      // 在 app.js 文件中修改 deleteMessage 函数
       async function deleteMessage(messageId) {
         try {
           // 从本地存储中删除
@@ -923,8 +923,8 @@ export function appPageTemplate(username) {
           const updatedMessages = messages.filter(msg => msg.id !== messageId);
           localStorage.setItem('syncMessages', JSON.stringify(updatedMessages));
           
-          // 从服务器删除
-          const response = await authenticatedFetch(`/api/messages/delete/${messageId}`, {
+          // 从服务器删除 - 修复正则表达式错误
+          const response = await authenticatedFetch("/api/messages/delete/" + messageId, {
             method: 'DELETE'
           });
           
