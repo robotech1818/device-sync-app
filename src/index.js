@@ -21,6 +21,16 @@ import {
 import { loginPageTemplate } from './templates/login';
 import { appPageTemplate } from './templates/app';
 
+// 简单的日志工具
+const logger = {
+  debug: (msg) => console.log(`[DEBUG] ${msg}`),
+  info: (msg) => console.log(`[INFO] ${msg}`),
+  error: (msg, err) => {
+    console.error(`[ERROR] ${msg}`);
+    if (err) console.error(err);
+  }
+};
+
 // Worker entry function
 export default {
   async fetch(request, env, ctx) {
@@ -55,10 +65,10 @@ export default {
       return handleForceRelogin(request, env);
     }
     
-    // All paths below require authentication
+    // 所有下面的路径都需要身份验证
     const token = getAuthToken(request);
     if (!token) {
-      // 不显示错误消息，而是重定向到登录页面
+      // 优化: 不显示错误消息，而是重定向到登录页面
       return new Response('', {
         status: 302,
         headers: {
@@ -69,10 +79,10 @@ export default {
     }
     
     try {
-      // Validate user
+      // 验证用户
       const username = await validateToken(token, env);
       if (!username) {
-        // 如果令牌无效，也重定向到登录页面
+        // 优化: 如果令牌无效，也重定向到登录页面
         return new Response('', {
           status: 302,
           headers: {
@@ -138,9 +148,18 @@ export default {
         });
       }
       
-      // 404 - Path not found
-      return new Response('Not Found', { status: 404 });
+      // 404 - Path not found - 优化返回格式化的JSON
+      return new Response(JSON.stringify({
+        success: false,
+        error: 'Not Found',
+        path: path
+      }), { 
+        status: 404,
+        headers: { 'Content-Type': 'application/json' }
+      });
     } catch (err) {
+      // 优化: 任何身份验证错误也应重定向到登录页面
+      logger.error('认证错误', err);
       return new Response('', {
         status: 302,
         headers: {
@@ -152,31 +171,43 @@ export default {
   }
 };
 
-// Get file changes (for polling sync)
+// 优化: 使用批量操作获取文件变更
 async function getFileChanges(since, username, env) {
   since = parseInt(since);
   
   try {
-    // Use list to get files with metadata
+    // 使用列表操作一次性获取所有元数据键
     const prefix = `file:${username}:`;
-    const metaPrefix = `${prefix}.*:meta`;
+    const metaSuffix = ':meta';
     
-    // Get all file metadata from KV
-    const filesList = await env.SYNC_KV.list({ prefix: metaPrefix });
-    
-    const changes = [];
-    const promises = filesList.keys.map(async (key) => {
-      const metadata = await env.SYNC_KV.get(key.name, 'json');
-      if (metadata) {
-        // Convert lastModified to timestamp for comparison
-        const modifiedTime = new Date(metadata.lastModified).getTime();
-        if (modifiedTime > since) {
-          changes.push(metadata);
-        }
-      }
+    const filesList = await env.SYNC_KV.list({ 
+      prefix,
+      suffix: metaSuffix
     });
     
-    await Promise.all(promises);
+    // 如果没有文件，直接返回空数组
+    if (filesList.keys.length === 0) {
+      return new Response(JSON.stringify({
+        success: true,
+        changes: []
+      }), {
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+    
+    // 批量获取所有元数据
+    const metaPromises = filesList.keys.map(key => 
+      env.SYNC_KV.get(key.name, 'json')
+    );
+    
+    const metadataResults = await Promise.all(metaPromises);
+    const allMetadata = metadataResults.filter(Boolean);
+    
+    // 筛选出自上次同步以来修改的文件
+    const changes = allMetadata.filter(metadata => {
+      const modifiedTime = new Date(metadata.lastModified).getTime();
+      return modifiedTime > since;
+    });
     
     return new Response(JSON.stringify({
       success: true,

@@ -6,6 +6,12 @@ const TOKEN_EXPIRY = 4 * 60 * 60;
 // 全局版本号和吊销列表的KV键
 const GLOBAL_VERSION_KEY = 'auth:global_version';
 
+// 缓存设置
+const CACHE_TIMEOUT = 5 * 60 * 1000; // 5分钟缓存
+let globalVersionCache = null;
+let globalVersionTimestamp = 0;
+let revokedTokenCache = new Map(); // 缓存已吊销的令牌
+
 // 简单的哈希函数（仅用于演示，生产环境应使用更安全的方法）
 function simpleHash(str) {
   let hash = 0;
@@ -17,12 +23,33 @@ function simpleHash(str) {
   return hash.toString(16); // 转换为16进制字符串
 }
 
-// 获取当前全局版本号
+// 创建简单的日志工具
+const logger = {
+  debug: (msg) => console.log(`[DEBUG] ${msg}`),
+  info: (msg) => console.log(`[INFO] ${msg}`),
+  error: (msg, err) => {
+    console.error(`[ERROR] ${msg}`);
+    if (err) console.error(err);
+  }
+};
+
+// 获取当前全局版本号（使用缓存减少KV读取）
 async function getGlobalAuthVersion(env) {
+  const now = Date.now();
+  
+  // 如果缓存有效，使用缓存
+  if (globalVersionCache !== null && (now - globalVersionTimestamp < CACHE_TIMEOUT)) {
+    return globalVersionCache;
+  }
+  
   try {
-    return await env.SYNC_KV.get(GLOBAL_VERSION_KEY) || '0';
+    const version = await env.SYNC_KV.get(GLOBAL_VERSION_KEY) || '0';
+    // 更新缓存
+    globalVersionCache = version;
+    globalVersionTimestamp = now;
+    return version;
   } catch (err) {
-    console.error('获取全局认证版本号失败:', err);
+    logger.error('获取全局认证版本号失败', err);
     return '0';
   }
 }
@@ -40,10 +67,14 @@ export async function updateGlobalAuthVersion(env) {
     // 更新KV
     await env.SYNC_KV.put(GLOBAL_VERSION_KEY, newVersion);
     
-    console.log(`已更新全局认证版本号至 ${newVersion}`);
+    // 更新缓存
+    globalVersionCache = newVersion;
+    globalVersionTimestamp = Date.now();
+    
+    logger.info(`已更新全局认证版本号至 ${newVersion}`);
     return newVersion;
   } catch (err) {
-    console.error('更新全局认证版本号失败:', err);
+    logger.error('更新全局认证版本号失败', err);
     return null;
   }
 }
@@ -58,21 +89,37 @@ async function addToRevocationList(token, env) {
       // 设置过期时间，与令牌过期时间相同
       expirationTtl: TOKEN_EXPIRY
     });
+    
+    // 更新内存缓存
+    revokedTokenCache.set(token, true);
+    
     return true;
   } catch (err) {
-    console.error('添加吊销令牌失败:', err);
+    logger.error('添加吊销令牌失败', err);
     return false;
   }
 }
 
-// 检查令牌是否被吊销
+// 检查令牌是否被吊销（使用缓存减少KV读取）
 async function isTokenRevoked(token, env) {
   try {
+    // 首先检查缓存
+    if (revokedTokenCache.has(token)) {
+      return true;
+    }
+    
     const revocationKey = `revoked:${token}`;
     const revokedTime = await env.SYNC_KV.get(revocationKey);
-    return !!revokedTime; // 如果找到吊销记录，则返回true
+    
+    // 更新缓存
+    if (revokedTime) {
+      revokedTokenCache.set(token, true);
+      return true;
+    }
+    
+    return false;
   } catch (err) {
-    console.error('检查令牌吊销状态错误:', err);
+    logger.error('检查令牌吊销状态错误', err);
     return false; // 出错时默认令牌未被吊销
   }
 }
@@ -81,17 +128,17 @@ async function isTokenRevoked(token, env) {
 export async function handleLogin(request, env) {
   try {
     // 解析请求体
-    console.log('开始处理登录请求');
+    logger.info('开始处理登录请求');
     const data = await request.json();
     const { username, password } = data;
     
-    console.log(`尝试验证用户: ${username}`);
+    logger.debug(`尝试验证用户: ${username}`);
     
     // 验证用户名/密码
     const isValid = await validateCredentials(username, password, env);
     
     if (!isValid) {
-      console.log('验证失败: 用户名或密码不正确');
+      logger.info('验证失败: 用户名或密码不正确');
       return new Response(JSON.stringify({
         success: false,
         error: '用户名或密码不正确'
@@ -101,15 +148,13 @@ export async function handleLogin(request, env) {
       });
     }
     
-    console.log('用户验证成功，准备生成JWT令牌');
+    logger.info('用户验证成功，准备生成JWT令牌');
     
     try {
       // 验证JWT_SECRET是否存在且有效
       if (!env.JWT_SECRET) {
         throw new Error('JWT_SECRET环境变量未设置');
       }
-      
-      console.log(`尝试使用JWT_SECRET生成令牌，密钥长度: ${env.JWT_SECRET.length}`);
       
       // 获取当前全局版本号
       const currentVersion = await getGlobalAuthVersion(env);
@@ -126,14 +171,14 @@ export async function handleLogin(request, env) {
       };
       
       const token = await jwt.sign(payload, env.JWT_SECRET);
-      console.log('JWT令牌生成成功');
+      logger.info('JWT令牌生成成功');
       
       // 验证KV命名空间是否绑定
       if (!env.SYNC_KV) {
         throw new Error('SYNC_KV命名空间未绑定');
       }
       
-      console.log('尝试将会话保存到KV');
+      logger.debug('尝试将会话保存到KV');
       // 保存会话到KV
       const sessionData = {
         username,
@@ -147,7 +192,7 @@ export async function handleLogin(request, env) {
         { expirationTtl: TOKEN_EXPIRY }
       );
       
-      console.log('会话成功保存到KV');
+      logger.info('会话成功保存到KV');
       
       return new Response(JSON.stringify({
         success: true,
@@ -157,7 +202,7 @@ export async function handleLogin(request, env) {
         headers: { 'Content-Type': 'application/json' }
       });
     } catch (tokenErr) {
-      console.error('令牌生成或保存错误:', tokenErr.message);
+      logger.error('令牌生成或保存错误', tokenErr);
       return new Response(JSON.stringify({
         success: false,
         error: '登录处理过程中发生错误: ' + tokenErr.message
@@ -167,7 +212,7 @@ export async function handleLogin(request, env) {
       });
     }
   } catch (err) {
-    console.error('请求解析错误:', err.message);
+    logger.error('请求解析错误', err);
     return new Response(JSON.stringify({
       success: false,
       error: '无效的请求格式: ' + err.message
@@ -185,11 +230,11 @@ export async function handleLogout(request, env) {
     const token = getAuthToken(request);
     
     if (token) {
-      // 将令牌添加到吊销列表
-      await addToRevocationList(token, env);
-      
-      // 移除会话数据
-      await env.SYNC_KV.delete(`session:${token}`);
+      // 将令牌添加到吊销列表并移除会话数据（并行处理）
+      await Promise.all([
+        addToRevocationList(token, env),
+        env.SYNC_KV.delete(`session:${token}`)
+      ]);
     }
     
     return new Response(JSON.stringify({
@@ -199,6 +244,7 @@ export async function handleLogout(request, env) {
       headers: { 'Content-Type': 'application/json' }
     });
   } catch (err) {
+    logger.error('注销过程中发生错误', err);
     return new Response(JSON.stringify({
       success: false,
       error: '注销过程中发生错误: ' + err.message
@@ -254,21 +300,21 @@ export async function handleRefreshToken(request, env) {
     
     const newToken = await jwt.sign(payload, env.JWT_SECRET);
     
-    // 保存新的会话到KV
+    // 保存新的会话到KV并将旧令牌添加到吊销列表（并行处理）
     const sessionData = {
       username,
       created: Date.now(),
       expires: Date.now() + TOKEN_EXPIRY * 1000
     };
     
-    await env.SYNC_KV.put(
-      `session:${newToken}`, 
-      JSON.stringify(sessionData), 
-      { expirationTtl: TOKEN_EXPIRY }
-    );
-    
-    // 可选：将旧令牌添加到吊销列表
-    await addToRevocationList(token, env);
+    await Promise.all([
+      env.SYNC_KV.put(
+        `session:${newToken}`, 
+        JSON.stringify(sessionData), 
+        { expirationTtl: TOKEN_EXPIRY }
+      ),
+      addToRevocationList(token, env)
+    ]);
     
     return new Response(JSON.stringify({
       success: true,
@@ -278,6 +324,7 @@ export async function handleRefreshToken(request, env) {
       headers: { 'Content-Type': 'application/json' }
     });
   } catch (err) {
+    logger.error('刷新令牌过程中发生错误', err);
     return new Response(JSON.stringify({
       success: false,
       error: '刷新令牌过程中发生错误: ' + err.message
@@ -317,6 +364,7 @@ export async function handleForceRelogin(request, env) {
       headers: { 'Content-Type': 'application/json' }
     });
   } catch (err) {
+    logger.error('强制重新登录过程中发生错误', err);
     return new Response(JSON.stringify({
       success: false,
       error: '强制重新登录过程中发生错误: ' + err.message
@@ -329,24 +377,24 @@ export async function handleForceRelogin(request, env) {
 
 // 验证用户凭据
 async function validateCredentials(username, password, env) {
-  console.log(`检查凭据 - 用户名: ${username}, 有效用户名: ${env.VALID_USERNAME}`);
+  logger.debug(`检查凭据 - 用户名: ${username}, 有效用户名: ${env.VALID_USERNAME}`);
   
   // 开发模式下使用硬编码账号
   if (username === env.VALID_USERNAME && password === env.VALID_PASSWORD) {
-    console.log('使用环境变量验证通过');
+    logger.info('使用环境变量验证通过');
     return true;
   }
   
   // 从KV获取用户信息
-  console.log('尝试从KV获取用户信息');
+  logger.debug('尝试从KV获取用户信息');
   const userKey = `auth:${username}`;
   let userData;
   
   try {
     userData = await env.SYNC_KV.get(userKey, 'json');
-    console.log('KV用户数据:', userData ? '已找到' : '未找到');
+    logger.debug('KV用户数据: ' + (userData ? '已找到' : '未找到'));
   } catch (kvErr) {
-    console.error('KV获取错误:', kvErr.message);
+    logger.error('KV获取错误', kvErr);
     return false;
   }
   
@@ -383,60 +431,59 @@ export function getAuthToken(request) {
   return url.searchParams.get('token');
 }
 
-// 验证令牌并返回用户名
+// 验证令牌并返回用户名 - 优化JWT验证流程
 export async function validateToken(token, env) {
   try {
     if (!token) {
-      console.log('validateToken: 令牌为空');
+      logger.debug('validateToken: 令牌为空');
       return null;
     }
     
-    // 检查令牌是否被吊销
+    // 检查令牌是否被吊销（使用缓存）
     const revoked = await isTokenRevoked(token, env);
     if (revoked) {
-      console.log('令牌已被吊销');
+      logger.debug('令牌已被吊销');
       return null;
     }
     
-    console.log(`尝试验证令牌，使用密钥长度: ${env.JWT_SECRET?.length || '未知'}`);
+    logger.debug(`尝试验证令牌，使用密钥长度: ${env.JWT_SECRET?.length || '未知'}`);
     
-    // 验证JWT令牌
-    const isValid = await jwt.verify(token, env.JWT_SECRET);
-    if (!isValid) {
-      console.log('JWT验证失败');
+    // 验证并解码JWT令牌（合并验证和解码操作）
+    try {
+      const decoded = await jwt.verify(token, env.JWT_SECRET, { complete: true });
+      
+      // 验证成功，解码的载荷已在decoded中
+      logger.debug('JWT验证成功，载荷: ' + JSON.stringify(decoded.payload));
+      
+      // 检查令牌中的版本号与当前全局版本号
+      const tokenVersion = decoded.payload.authVersion || '0';
+      const globalVersion = await getGlobalAuthVersion(env);
+      
+      // 如果令牌版本低于全局版本，则拒绝访问
+      if (parseInt(tokenVersion) < parseInt(globalVersion)) {
+        logger.debug(`令牌版本 (${tokenVersion}) 低于全局版本 (${globalVersion}), 需要重新登录`);
+        return null;
+      }
+      
+      // 获取令牌中的密码hash值
+      const tokenPasswordHash = decoded.payload.passwordHash;
+      
+      // 获取当前正确的密码hash
+      const currentPasswordHash = simpleHash(env.VALID_PASSWORD);
+      
+      // 如果令牌中的密码hash与当前密码不匹配，则拒绝访问
+      if (tokenPasswordHash !== currentPasswordHash) {
+        logger.debug('密码已变更，需要重新登录');
+        return null;
+      }
+      
+      return decoded.payload.username;
+    } catch (jwtErr) {
+      logger.error('JWT验证失败', jwtErr);
       return null;
     }
-    
-    console.log('JWT验证成功，解析令牌');
-    // 解析令牌以获取用户信息
-    const decoded = jwt.decode(token);
-    console.log('解析后的令牌载荷:', decoded.payload);
-    
-    // 检查令牌中的版本号与当前全局版本号
-    const tokenVersion = decoded.payload.authVersion || '0';
-    const globalVersion = await getGlobalAuthVersion(env);
-    
-    // 如果令牌版本低于全局版本，则拒绝访问
-    if (parseInt(tokenVersion) < parseInt(globalVersion)) {
-      console.log(`令牌版本 (${tokenVersion}) 低于全局版本 (${globalVersion}), 需要重新登录`);
-      return null;
-    }
-    
-    // 获取令牌中的密码hash值
-    const tokenPasswordHash = decoded.payload.passwordHash;
-    
-    // 获取当前正确的密码hash
-    const currentPasswordHash = simpleHash(env.VALID_PASSWORD);
-    
-    // 如果令牌中的密码hash与当前密码不匹配，则拒绝访问
-    if (tokenPasswordHash !== currentPasswordHash) {
-      console.log('密码已变更，需要重新登录');
-      return null;
-    }
-    
-    return decoded.payload.username;
   } catch (err) {
-    console.error('令牌验证错误:', err.message);
+    logger.error('令牌验证错误', err);
     return null;
   }
 }

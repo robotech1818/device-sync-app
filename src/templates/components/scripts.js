@@ -519,10 +519,10 @@ export function scriptsComponent() {
       const messageList = document.getElementById('messageList');
       const clearMessagesBtn = document.getElementById('clearMessagesBtn');
       
-      // Load messages from server
+      // 从服务器加载消息
       await loadServerMessages();
       
-      // Send message event handling
+      // 发送消息事件处理
       messageForm.addEventListener('submit', (e) => {
         e.preventDefault();
         const messageText = messageInput.value.trim();
@@ -532,30 +532,30 @@ export function scriptsComponent() {
         }
       });
       
-      // Clear messages event handling
+      // 清除消息事件处理
       clearMessagesBtn.addEventListener('click', async () => {
-        if (confirm('Are you sure you want to clear all messages?')) {
+        if (confirm('确定要清除所有消息吗？')) {
           try {
-            // Clear messages on server
+            // 在服务器上清除消息
             const response = await authenticatedFetch('/api/messages/clear', {
               method: 'POST'
             });
             
             if (response.ok) {
               renderMessages([]);
-              showToast('All messages cleared');
+              showToast('所有消息已清除');
             } else {
-              showToast('Failed to clear messages');
+              showToast('清除消息失败');
             }
           } catch (err) {
-            console.error('Error clearing server messages:', err);
-            showToast('Error clearing messages: ' + err.message);
+            console.error('清除服务器消息出错:', err);
+            showToast('清除消息出错: ' + err.message);
           }
         }
       });
     }
 
-    // Load messages from server
+    // 从服务器加载消息
     async function loadServerMessages() {
       try {
         const response = await authenticatedFetch('/api/messages');
@@ -570,12 +570,12 @@ export function scriptsComponent() {
           renderMessages([]);
         }
       } catch (err) {
-        console.error('Error loading server messages:', err);
+        console.error('加载服务器消息出错:', err);
         renderMessages([]);
       }
     }
 
-    // Send new message
+    // 发送新消息
     async function sendMessage(text) {
       const deviceId = getDeviceId();
       const message = {
@@ -585,23 +585,23 @@ export function scriptsComponent() {
         timestamp: new Date().toISOString()
       };
       
-      // Sync to server first
+      // 先同步到服务器
       try {
         const response = await syncMessageToServer(message);
         
         if (response && response.ok) {
-          // Reload messages to get the updated list
+          // 重新加载消息以获取更新的列表
           await loadServerMessages();
         } else {
-          showToast('Failed to send message');
+          showToast('发送消息失败');
         }
       } catch (err) {
-        console.error('Error sending message:', err);
-        showToast('Error sending message: ' + err.message);
+        console.error('发送消息出错:', err);
+        showToast('发送消息出错: ' + err.message);
       }
     }
 
-    // Sync message to server
+    // 将消息同步到服务器
     async function syncMessageToServer(message) {
       try {
         const response = await authenticatedFetch('/api/messages/sync', {
@@ -616,37 +616,37 @@ export function scriptsComponent() {
         });
         
         if (!response.ok) {
-          console.error('Message sync failed:', await response.text());
+          console.error('消息同步失败:', await response.text());
         } else {
-          console.log('Message successfully synced to server');
+          console.log('消息已成功同步到服务器');
         }
         
         return response;
       } catch (err) {
-        console.error('Message sync error:', err);
+        console.error('消息同步错误:', err);
         throw err;
       }
     }
 
-    // Delete message
+    // 删除消息
     async function deleteMessage(messageId) {
       try {
-        // Delete from server
+        // 从服务器删除
         const response = await authenticatedFetch("/api/messages/delete/" + messageId, {
           method: 'DELETE'
         });
         
         if (response.ok) {
-          // Reload messages to get the updated list
+          // 重新加载消息以获取更新的列表
           await loadServerMessages();
-          showToast('Message deleted');
+          showToast('消息已删除');
         } else {
-          console.error("Message deletion failed, status code: " + response.status);
-          showToast("Failed to delete message");
+          console.error("消息删除失败，状态码: " + response.status);
+          showToast("删除消息失败");
         }
       } catch (err) {
-        console.error('Error deleting message:', err);
-        showToast("Error deleting message: " + err.message);
+        console.error('删除消息出错:', err);
+        showToast("删除消息出错: " + err.message);
       }
     }
     

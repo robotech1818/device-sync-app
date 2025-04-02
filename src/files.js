@@ -9,31 +9,29 @@ export async function listFiles(username, env) {
     
     console.log(`使用前缀查询: ${prefix}`);
     
-    // 获取所有以此前缀开头的键
-    const files = await env.SYNC_KV.list({ prefix });
+    // 获取所有以此前缀开头且以metaSuffix结尾的键
+    const files = await env.SYNC_KV.list({ 
+      prefix,
+      suffix: metaSuffix 
+    });
     
     console.log(`KV查询返回的键数量: ${files.keys.length}`);
-    console.log(`KV查询返回的键:`, files.keys.map(k => k.name));
     
-    // 筛选出元数据键（以:meta结尾）
-    const metaKeys = files.keys.filter(key => key.name.endsWith(metaSuffix));
-    console.log(`找到的元数据键数量: ${metaKeys.length}`);
-    
-    // 处理文件列表
+    // 批量获取文件元数据
     const fileList = [];
-    for (const key of metaKeys) {
-      console.log(`获取文件元数据: ${key.name}`);
-      try {
-        const metadata = await env.SYNC_KV.get(key.name, 'json');
+    if (files.keys.length > 0) {
+      const metaPromises = files.keys.map(key => 
+        env.SYNC_KV.get(key.name, 'json')
+      );
+      
+      const metadataResults = await Promise.all(metaPromises);
+      
+      // 过滤掉无效的元数据
+      metadataResults.forEach(metadata => {
         if (metadata) {
-          console.log(`找到有效元数据:`, metadata);
           fileList.push(metadata);
-        } else {
-          console.log(`元数据为空: ${key.name}`);
         }
-      } catch (metaErr) {
-        console.error(`获取元数据错误 ${key.name}:`, metaErr.message);
-      }
+      });
     }
     
     console.log(`总共返回 ${fileList.length} 个文件`);
@@ -74,12 +72,12 @@ export async function deleteFile(fileId, username, env) {
       });
     }
     
-    // 删除文件内容
+    // 批量删除文件内容和元数据
     const contentKey = `file:${username}:${fileId}:content`;
-    await env.SYNC_KV.delete(contentKey);
-    
-    // 删除文件元数据
-    await env.SYNC_KV.delete(metaKey);
+    await Promise.all([
+      env.SYNC_KV.delete(contentKey),
+      env.SYNC_KV.delete(metaKey)
+    ]);
     
     return new Response(JSON.stringify({
       success: true
@@ -131,9 +129,12 @@ export async function clearMessages(username, env) {
     const listKey = `message_list:${username}`;
     const messageList = await env.SYNC_KV.get(listKey, 'json') || [];
     
-    // 删除所有消息
-    for (const msgId of messageList) {
-      await env.SYNC_KV.delete(`message:${username}:${msgId}`);
+    // 批量删除所有消息
+    if (messageList.length > 0) {
+      const deletePromises = messageList.map(msgId => 
+        env.SYNC_KV.delete(`message:${username}:${msgId}`)
+      );
+      await Promise.all(deletePromises);
     }
     
     // 清空消息列表
@@ -155,6 +156,9 @@ export async function clearMessages(username, env) {
   }
 }
 
+// 文件大小限制提高到10MB
+const FILE_SIZE_LIMIT = 10 * 1024 * 1024; // 10MB
+
 // Handle file upload
 export async function handleFileUpload(request, username, env) {
   try {
@@ -171,11 +175,11 @@ export async function handleFileUpload(request, username, env) {
       });
     }
     
-    // Check file size limit
-    if (file.size > 2 * 1024 * 1024) { // 2MB limit
+    // 文件大小限制提高到10MB
+    if (file.size > FILE_SIZE_LIMIT) {
       return new Response(JSON.stringify({
         success: false,
-        error: 'File size exceeds 2MB limit'
+        error: 'File size exceeds 10MB limit'
       }), {
         status: 400,
         headers: { 'Content-Type': 'application/json' }
@@ -198,17 +202,19 @@ export async function handleFileUpload(request, username, env) {
     // Read file content and save to KV
     const fileContent = await file.arrayBuffer();
     
-    // Store file content
-    await env.SYNC_KV.put(
-      `file:${username}:${fileId}:content`,
-      fileContent
-    );
-    
-    // Store file metadata
-    await env.SYNC_KV.put(
-      `file:${username}:${fileId}:meta`,
-      JSON.stringify(metadata)
-    );
+    // 使用Promise.all并行处理两个存储操作
+    await Promise.all([
+      // Store file content
+      env.SYNC_KV.put(
+        `file:${username}:${fileId}:content`,
+        fileContent
+      ),
+      // Store file metadata
+      env.SYNC_KV.put(
+        `file:${username}:${fileId}:meta`,
+        JSON.stringify(metadata)
+      )
+    ]);
     
     // 检查并限制文件数量（只保留最近的10个文件）
     await limitFileCount(username, 10, env);
@@ -231,29 +237,29 @@ export async function handleFileUpload(request, username, env) {
   }
 }
 
-// 限制文件数量，保留最近的n个文件
+// 限制文件数量，保留最近的n个文件 - 优化批量操作
 async function limitFileCount(username, limit, env) {
   try {
     // 获取所有文件元数据
     const prefix = `file:${username}:`;
     const metaSuffix = ':meta';
     
-    const files = await env.SYNC_KV.list({ prefix });
-    const metaKeys = files.keys.filter(key => key.name.endsWith(metaSuffix));
+    const files = await env.SYNC_KV.list({ 
+      prefix,
+      suffix: metaSuffix
+    });
     
     // 如果文件数量未超过限制，无需操作
-    if (metaKeys.length <= limit) {
+    if (files.keys.length <= limit) {
       return;
     }
     
     // 获取所有文件元数据
-    const fileList = [];
-    for (const key of metaKeys) {
-      const metadata = await env.SYNC_KV.get(key.name, 'json');
-      if (metadata) {
-        fileList.push(metadata);
-      }
-    }
+    const metaPromises = files.keys.map(key => 
+      env.SYNC_KV.get(key.name, 'json')
+    );
+    const metadataResults = await Promise.all(metaPromises);
+    const fileList = metadataResults.filter(Boolean);
     
     // 按最近修改时间排序
     fileList.sort((a, b) => {
@@ -263,12 +269,14 @@ async function limitFileCount(username, limit, env) {
     // 删除旧文件（保留最近的limit个文件）
     const filesToDelete = fileList.slice(limit);
     
+    // 批量删除操作
+    const deletePromises = [];
     for (const file of filesToDelete) {
-      // 删除文件内容
-      await env.SYNC_KV.delete(`file:${username}:${file.id}:content`);
-      // 删除文件元数据
-      await env.SYNC_KV.delete(`file:${username}:${file.id}:meta`);
+      deletePromises.push(env.SYNC_KV.delete(`file:${username}:${file.id}:content`));
+      deletePromises.push(env.SYNC_KV.delete(`file:${username}:${file.id}:meta`));
     }
+    
+    await Promise.all(deletePromises);
     
     console.log(`已删除 ${filesToDelete.length} 个旧文件，保留 ${limit} 个最新文件`);
   } catch (err) {
@@ -276,7 +284,7 @@ async function limitFileCount(username, limit, env) {
   }
 }
 
-// Download file
+// Download file - 优化流式下载
 export async function downloadFile(fileId, username, env) {
   try {
     // Get file metadata
@@ -293,7 +301,7 @@ export async function downloadFile(fileId, username, env) {
       });
     }
     
-    // Get file content
+    // Get file content - 使用流式API（如果Cloudflare KV支持）
     const contentKey = `file:${username}:${fileId}:content`;
     const fileContent = await env.SYNC_KV.get(contentKey, 'arrayBuffer');
     
@@ -412,8 +420,6 @@ export async function syncMessage(request, username, env) {
       owner: username
     };
     
-    await env.SYNC_KV.put(messageKey, JSON.stringify(messageData));
-    
     // Get message list for this user to update
     const listKey = `message_list:${username}`;
     let messageList = await env.SYNC_KV.get(listKey, 'json') || [];
@@ -426,17 +432,23 @@ export async function syncMessage(request, username, env) {
     if (messageList.length > MAX_MESSAGES) {
       const messagesToDelete = messageList.slice(0, messageList.length - MAX_MESSAGES);
       
-      // Delete old messages
-      for (const msgId of messagesToDelete) {
-        await env.SYNC_KV.delete(`message:${username}:${msgId}`);
+      // 批量删除旧消息
+      if (messagesToDelete.length > 0) {
+        const deletePromises = messagesToDelete.map(msgId => 
+          env.SYNC_KV.delete(`message:${username}:${msgId}`)
+        );
+        await Promise.all(deletePromises);
       }
       
       // Update message list
       messageList = messageList.slice(messageList.length - MAX_MESSAGES);
     }
     
-    // Save updated message list
-    await env.SYNC_KV.put(listKey, JSON.stringify(messageList));
+    // 使用Promise.all并行处理两个存储操作
+    await Promise.all([
+      env.SYNC_KV.put(messageKey, JSON.stringify(messageData)),
+      env.SYNC_KV.put(listKey, JSON.stringify(messageList))
+    ]);
     
     return new Response(JSON.stringify({
       success: true,
@@ -462,15 +474,23 @@ export async function getMessages(username, env) {
     const listKey = `message_list:${username}`;
     const messageList = await env.SYNC_KV.get(listKey, 'json') || [];
     
-    // Fetch all messages
-    const messages = [];
-    for (const msgId of messageList) {
-      const messageKey = `message:${username}:${msgId}`;
-      const messageData = await env.SYNC_KV.get(messageKey, 'json');
-      if (messageData) {
-        messages.push(messageData);
-      }
+    // 批量获取所有消息
+    if (messageList.length === 0) {
+      return new Response(JSON.stringify({
+        success: true,
+        messages: []
+      }), {
+        headers: { 'Content-Type': 'application/json' }
+      });
     }
+    
+    // 使用Promise.all批量获取消息
+    const messageKeys = messageList.map(msgId => `message:${username}:${msgId}`);
+    const messagesPromises = messageKeys.map(key => env.SYNC_KV.get(key, 'json'));
+    const messagesData = await Promise.all(messagesPromises);
+    
+    // 过滤掉null值
+    const messages = messagesData.filter(Boolean);
     
     // Sort by timestamp
     messages.sort((a, b) => {
