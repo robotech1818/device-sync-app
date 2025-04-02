@@ -58,14 +58,28 @@ export default {
     // All paths below require authentication
     const token = getAuthToken(request);
     if (!token) {
-      return new Response('Unauthorized: Token missing', { status: 401 });
+      // 不显示错误消息，而是重定向到登录页面
+      return new Response('', {
+        status: 302,
+        headers: {
+          'Location': '/login',
+          'Set-Cookie': 'authToken=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT'
+        }
+      });
     }
     
     try {
       // Validate user
       const username = await validateToken(token, env);
       if (!username) {
-        return new Response('Unauthorized: Invalid token', { status: 401 });
+        // 如果令牌无效，也重定向到登录页面
+        return new Response('', {
+          status: 302,
+          headers: {
+            'Location': '/login',
+            'Set-Cookie': 'authToken=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT'
+          }
+        });
       }
       
       // Route API requests
@@ -127,7 +141,13 @@ export default {
       // 404 - Path not found
       return new Response('Not Found', { status: 404 });
     } catch (err) {
-      return new Response(`Authentication error: ${err.message}`, { status: 401 });
+      return new Response('', {
+        status: 302,
+        headers: {
+          'Location': '/login',
+          'Set-Cookie': 'authToken=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT'
+        }
+      });
     }
   }
 };

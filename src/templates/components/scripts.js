@@ -519,11 +519,8 @@ export function scriptsComponent() {
       const messageList = document.getElementById('messageList');
       const clearMessagesBtn = document.getElementById('clearMessagesBtn');
       
-      // First load local messages
-      const localMessages = JSON.parse(localStorage.getItem('syncMessages') || '[]');
-      
-      // Get and merge server messages
-      await loadAndMergeServerMessages(localMessages);
+      // Load messages from server
+      await loadServerMessages();
       
       // Send message event handling
       messageForm.addEventListener('submit', (e) => {
@@ -538,56 +535,46 @@ export function scriptsComponent() {
       // Clear messages event handling
       clearMessagesBtn.addEventListener('click', async () => {
         if (confirm('Are you sure you want to clear all messages?')) {
-          localStorage.removeItem('syncMessages');
           try {
-            // Also clear messages on server
-            await authenticatedFetch('/api/messages/clear', {
+            // Clear messages on server
+            const response = await authenticatedFetch('/api/messages/clear', {
               method: 'POST'
             });
+            
+            if (response.ok) {
+              renderMessages([]);
+              showToast('All messages cleared');
+            } else {
+              showToast('Failed to clear messages');
+            }
           } catch (err) {
             console.error('Error clearing server messages:', err);
+            showToast('Error clearing messages: ' + err.message);
           }
-          renderMessages([]);
         }
       });
     }
-    
-    // Load and merge server messages with local messages
-    async function loadAndMergeServerMessages(localMessages) {
+
+    // Load messages from server
+    async function loadServerMessages() {
       try {
         const response = await authenticatedFetch('/api/messages');
         if (response.ok) {
           const data = await response.json();
           if (data.success && data.messages) {
-            // Merge local and server messages, avoiding duplicates
-            const serverMessages = data.messages;
-            const allMessages = [...localMessages];
-            
-            // Add messages that exist on server but not locally
-            serverMessages.forEach(serverMsg => {
-              if (!allMessages.some(localMsg => localMsg.id === serverMsg.id)) {
-                allMessages.push(serverMsg);
-              }
-            });
-            
-            // Sort by timestamp
-            allMessages.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-            
-            // Save merged messages
-            localStorage.setItem('syncMessages', JSON.stringify(allMessages));
-            renderMessages(allMessages);
+            renderMessages(data.messages);
           } else {
-            renderMessages(localMessages);
+            renderMessages([]);
           }
         } else {
-          renderMessages(localMessages);
+          renderMessages([]);
         }
       } catch (err) {
         console.error('Error loading server messages:', err);
-        renderMessages(localMessages);
+        renderMessages([]);
       }
     }
-    
+
     // Send new message
     async function sendMessage(text) {
       const deviceId = getDeviceId();
@@ -598,24 +585,22 @@ export function scriptsComponent() {
         timestamp: new Date().toISOString()
       };
       
-      // Add to localStorage
-      const messages = JSON.parse(localStorage.getItem('syncMessages') || '[]');
-      messages.push(message);
-      
-      // Limit number of messages
-      if (messages.length > MAX_MESSAGES) {
-        messages.splice(0, messages.length - MAX_MESSAGES);
+      // Sync to server first
+      try {
+        const response = await syncMessageToServer(message);
+        
+        if (response && response.ok) {
+          // Reload messages to get the updated list
+          await loadServerMessages();
+        } else {
+          showToast('Failed to send message');
+        }
+      } catch (err) {
+        console.error('Error sending message:', err);
+        showToast('Error sending message: ' + err.message);
       }
-      
-      localStorage.setItem('syncMessages', JSON.stringify(messages));
-      
-      // Update UI
-      renderMessages(messages);
-      
-      // Sync to server
-      await syncMessageToServer(message);
     }
-    
+
     // Sync message to server
     async function syncMessageToServer(message) {
       try {
@@ -635,31 +620,30 @@ export function scriptsComponent() {
         } else {
           console.log('Message successfully synced to server');
         }
+        
+        return response;
       } catch (err) {
         console.error('Message sync error:', err);
+        throw err;
       }
     }
-    
+
     // Delete message
     async function deleteMessage(messageId) {
       try {
-        // Delete from local storage
-        const messages = JSON.parse(localStorage.getItem('syncMessages') || '[]');
-        const updatedMessages = messages.filter(msg => msg.id !== messageId);
-        localStorage.setItem('syncMessages', JSON.stringify(updatedMessages));
-        
         // Delete from server
         const response = await authenticatedFetch("/api/messages/delete/" + messageId, {
           method: 'DELETE'
         });
         
-        if (!response.ok) {
+        if (response.ok) {
+          // Reload messages to get the updated list
+          await loadServerMessages();
+          showToast('Message deleted');
+        } else {
           console.error("Message deletion failed, status code: " + response.status);
+          showToast("Failed to delete message");
         }
-        
-        // Update UI
-        renderMessages(updatedMessages);
-        showToast('Message deleted');
       } catch (err) {
         console.error('Error deleting message:', err);
         showToast("Error deleting message: " + err.message);
