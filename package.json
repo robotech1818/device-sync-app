@@ -11,6 +11,6 @@
     "@tsndr/cloudflare-worker-jwt": "^2.4.5"
   },
   "devDependencies": {
-    "wrangler": "^3.37.0"
+    "wrangler": "^4.6.0"
   }
 }
