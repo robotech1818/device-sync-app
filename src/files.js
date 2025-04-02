@@ -57,6 +57,74 @@ export async function listFiles(username, env) {
   }
 }
 
+// 删除文件
+export async function deleteFile(fileId, username, env) {
+  try {
+    // 获取文件元数据
+    const metaKey = `file:${username}:${fileId}:meta`;
+    const metadata = await env.SYNC_KV.get(metaKey, 'json');
+    
+    if (!metadata) {
+      return new Response(JSON.stringify({
+        success: false,
+        error: 'File not found'
+      }), {
+        status: 404,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+    
+    // 删除文件内容
+    const contentKey = `file:${username}:${fileId}:content`;
+    await env.SYNC_KV.delete(contentKey);
+    
+    // 删除文件元数据
+    await env.SYNC_KV.delete(metaKey);
+    
+    return new Response(JSON.stringify({
+      success: true
+    }), {
+      headers: { 'Content-Type': 'application/json' }
+    });
+  } catch (err) {
+    return new Response(JSON.stringify({
+      success: false,
+      error: `Failed to delete file: ${err.message}`
+    }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+}
+
+// 删除消息
+export async function deleteMessage(messageId, username, env) {
+  try {
+    // 删除消息
+    await env.SYNC_KV.delete(`message:${username}:${messageId}`);
+    
+    // 更新消息列表
+    const listKey = `message_list:${username}`;
+    let messageList = await env.SYNC_KV.get(listKey, 'json') || [];
+    messageList = messageList.filter(id => id !== messageId);
+    await env.SYNC_KV.put(listKey, JSON.stringify(messageList));
+    
+    return new Response(JSON.stringify({
+      success: true
+    }), {
+      headers: { 'Content-Type': 'application/json' }
+    });
+  } catch (err) {
+    return new Response(JSON.stringify({
+      success: false,
+      error: `Failed to delete message: ${err.message}`
+    }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+}
+
 export async function clearMessages(username, env) {
   try {
     // 获取消息列表
@@ -142,6 +210,9 @@ export async function handleFileUpload(request, username, env) {
       JSON.stringify(metadata)
     );
     
+    // 检查并限制文件数量（只保留最近的10个文件）
+    await limitFileCount(username, 10, env);
+    
     return new Response(JSON.stringify({
       success: true,
       fileId: fileId,
@@ -157,6 +228,51 @@ export async function handleFileUpload(request, username, env) {
       status: 500,
       headers: { 'Content-Type': 'application/json' }
     });
+  }
+}
+
+// 限制文件数量，保留最近的n个文件
+async function limitFileCount(username, limit, env) {
+  try {
+    // 获取所有文件元数据
+    const prefix = `file:${username}:`;
+    const metaSuffix = ':meta';
+    
+    const files = await env.SYNC_KV.list({ prefix });
+    const metaKeys = files.keys.filter(key => key.name.endsWith(metaSuffix));
+    
+    // 如果文件数量未超过限制，无需操作
+    if (metaKeys.length <= limit) {
+      return;
+    }
+    
+    // 获取所有文件元数据
+    const fileList = [];
+    for (const key of metaKeys) {
+      const metadata = await env.SYNC_KV.get(key.name, 'json');
+      if (metadata) {
+        fileList.push(metadata);
+      }
+    }
+    
+    // 按最近修改时间排序
+    fileList.sort((a, b) => {
+      return new Date(b.lastModified) - new Date(a.lastModified);
+    });
+    
+    // 删除旧文件（保留最近的limit个文件）
+    const filesToDelete = fileList.slice(limit);
+    
+    for (const file of filesToDelete) {
+      // 删除文件内容
+      await env.SYNC_KV.delete(`file:${username}:${file.id}:content`);
+      // 删除文件元数据
+      await env.SYNC_KV.delete(`file:${username}:${file.id}:meta`);
+    }
+    
+    console.log(`已删除 ${filesToDelete.length} 个旧文件，保留 ${limit} 个最新文件`);
+  } catch (err) {
+    console.error('限制文件数量错误:', err);
   }
 }
 
