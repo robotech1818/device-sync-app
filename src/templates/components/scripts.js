@@ -883,15 +883,61 @@ export function scriptsComponent() {
         .replace(/'/g, '&#039;');
     }
     
-    // Poll for file changes
+    // 基于用户焦点和页面可见性的条件性轮询
     function pollForChanges() {
-      // Check for changes every 5 seconds
-      setInterval(async () => {
+      const ACTIVE_POLL_INTERVAL = 10000;  // 活跃状态下10秒轮询一次
+      const INACTIVE_POLL_INTERVAL = 60000; // 非活跃状态下60秒轮询一次
+      
+      let pollTimerId = null;
+      let isPageActive = true; // 默认页面是活跃的
+      
+      // 页面可见性变化处理函数
+      function handleVisibilityChange() {
+        if (document.hidden) {
+          isPageActive = false;
+          console.log('页面不可见，减慢轮询频率');
+          // 如果当前有计时器，清除并以较慢频率重新开始
+          if (pollTimerId) {
+            clearTimeout(pollTimerId);
+            pollTimerId = setTimeout(doPoll, INACTIVE_POLL_INTERVAL);
+          }
+        } else {
+          isPageActive = true;
+          console.log('页面可见，恢复正常轮询频率');
+          // 如果当前有计时器，清除并以正常频率重新开始
+          if (pollTimerId) {
+            clearTimeout(pollTimerId);
+            pollTimerId = setTimeout(doPoll, ACTIVE_POLL_INTERVAL);
+          }
+        }
+      }
+      
+      // 监听页面可见性变化
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+      
+      // 窗口焦点变化处理函数
+      function handleFocusChange(isFocused) {
+        isPageActive = isFocused;
+        console.log(isFocused ? '窗口获得焦点，恢复正常轮询频率' : '窗口失去焦点，减慢轮询频率');
+        
+        // 如果当前有计时器，清除并以相应频率重新开始
+        if (pollTimerId) {
+          clearTimeout(pollTimerId);
+          pollTimerId = setTimeout(doPoll, isFocused ? ACTIVE_POLL_INTERVAL : INACTIVE_POLL_INTERVAL);
+        }
+      }
+      
+      // 监听窗口焦点变化
+      window.addEventListener('focus', () => handleFocusChange(true));
+      window.addEventListener('blur', () => handleFocusChange(false));
+      
+      // 轮询函数
+      async function doPoll() {
         try {
-          // Get last sync time
+          // 获取最后同步时间
           const lastSync = localStorage.getItem('lastSyncTime') || 0;
           
-          // Request file changes
+          // 请求文件变更
           const response = await authenticatedFetch('/api/files/changes?since=' + lastSync);
           
           if (response.status === 401) {
@@ -904,14 +950,20 @@ export function scriptsComponent() {
           if (response.ok) {
             const data = await response.json();
             if (data.success && data.changes && data.changes.length > 0) {
-              // New changes, reload file list
+              // 有新变更，重新加载文件列表
               loadFiles();
             }
           }
         } catch (error) {
           console.error('Sync error:', error);
         }
-      }, 5000);
+        
+        // 根据当前页面状态安排下一次轮询
+        pollTimerId = setTimeout(doPoll, isPageActive ? ACTIVE_POLL_INTERVAL : INACTIVE_POLL_INTERVAL);
+      }
+      
+      // 开始第一次轮询
+      pollTimerId = setTimeout(doPoll, ACTIVE_POLL_INTERVAL);
     }
     
     // Get device ID

@@ -171,12 +171,33 @@ export default {
   }
 };
 
-// 获取文件变更 - 修复版本
+// 文件变更缓存
+const fileChangesCache = {
+  // 格式: username_timestamp: {timestamp, files, expiresAt}
+};
+
+// 获取文件变更 - 带缓存的优化版本
 async function getFileChanges(since, username, env) {
   since = parseInt(since);
   
   try {
     console.log(`获取用户 ${username} 的文件变更，since: ${since}`);
+    
+    // 生成缓存键
+    const cacheKey = `${username}_${since}`;
+    
+    // 检查缓存中是否有有效数据
+    const now = Date.now();
+    if (fileChangesCache[cacheKey] && fileChangesCache[cacheKey].expiresAt > now) {
+      console.log(`使用缓存数据，缓存将在${(fileChangesCache[cacheKey].expiresAt - now) / 1000}秒后过期`);
+      return new Response(JSON.stringify({
+        success: true,
+        changes: fileChangesCache[cacheKey].files,
+        fromCache: true
+      }), {
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
     
     // 获取所有文件元数据
     const prefix = `file:${username}:`;
@@ -206,11 +227,21 @@ async function getFileChanges(since, username, env) {
         }
       } catch (metaErr) {
         console.error(`获取元数据错误 ${key.name}:`, metaErr.message);
-        // 继续处理下一个文件，不中断
       }
     }
     
     console.log(`找到 ${changes.length} 个变更的文件`);
+    
+    // 更新缓存
+    // 设置缓存过期时间为30秒
+    fileChangesCache[cacheKey] = {
+      timestamp: now,
+      files: changes,
+      expiresAt: now + 30000 // 30秒缓存
+    };
+    
+    // 清理过期缓存
+    cleanExpiredCache();
     
     return new Response(JSON.stringify({
       success: true,
@@ -228,5 +259,15 @@ async function getFileChanges(since, username, env) {
       status: 500,
       headers: { 'Content-Type': 'application/json' }
     });
+  }
+}
+
+// 清理过期的缓存项
+function cleanExpiredCache() {
+  const now = Date.now();
+  for (const key in fileChangesCache) {
+    if (fileChangesCache[key].expiresAt < now) {
+      delete fileChangesCache[key];
+    }
   }
 }
