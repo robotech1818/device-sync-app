@@ -269,6 +269,11 @@ export function appPageTemplate(username) {
         z-index: 1001;
       }
       
+      /* 长按高亮样式 */
+      .touch-feedback {
+        background-color: rgba(0, 102, 255, 0.1);
+      }
+      
       /* Responsive */
       @media (max-width: 768px) {
         .container {
@@ -847,10 +852,46 @@ export function appPageTemplate(username) {
             <div class="message-content">\${escapeHTML(msg.text)}</div>
           \`;
           
-          // 添加右键菜单事件
+          // 添加右键菜单事件 (对于桌面设备)
           messageItem.addEventListener('contextmenu', function(e) {
             e.preventDefault();
             showContextMenu(e, messageItem.dataset.messageText);
+          });
+          
+          // 添加长按事件 (对于移动设备)
+          let touchTimer;
+          let touchDuration = 700; // 长按时间（毫秒）
+          
+          messageItem.addEventListener('touchstart', function(e) {
+            // 记录开始触摸时间
+            touchTimer = setTimeout(function() {
+              // 阻止默认长按行为（如选择文本）
+              e.preventDefault();
+              
+              // 显示视觉反馈
+              messageItem.classList.add('touch-feedback');
+              
+              // 使用触摸坐标显示菜单
+              const touch = e.touches[0];
+              showContextMenu({
+                pageX: touch.pageX,
+                pageY: touch.pageY
+              }, messageItem.dataset.messageText);
+            }, touchDuration);
+          });
+          
+          messageItem.addEventListener('touchend', function() {
+            // 触摸结束时清除计时器
+            clearTimeout(touchTimer);
+            // 移除视觉反馈
+            messageItem.classList.remove('touch-feedback');
+          });
+          
+          messageItem.addEventListener('touchmove', function() {
+            // 如果触摸移动，取消长按计时器
+            clearTimeout(touchTimer);
+            // 移除视觉反馈
+            messageItem.classList.remove('touch-feedback');
           });
           
           messageList.appendChild(messageItem);
@@ -884,15 +925,33 @@ export function appPageTemplate(username) {
         // 添加菜单项到菜单
         menu.appendChild(copyItem);
         
-        // 设置菜单位置（使用字符串拼接而不是模板字符串）
+        // 设置菜单位置
         menu.style.left = event.pageX + "px";
         menu.style.top = event.pageY + "px";
+        
+        // 确保菜单不会超出屏幕边界
+        setTimeout(() => {
+          const menuRect = menu.getBoundingClientRect();
+          const windowWidth = window.innerWidth;
+          const windowHeight = window.innerHeight;
+          
+          // 检查右边界
+          if (menuRect.right > windowWidth) {
+            menu.style.left = (windowWidth - menuRect.width - 10) + "px";
+          }
+          
+          // 检查下边界
+          if (menuRect.bottom > windowHeight) {
+            menu.style.top = (windowHeight - menuRect.height - 10) + "px";
+          }
+        }, 0);
         
         // 添加到文档
         document.body.appendChild(menu);
         
         // 点击其他区域关闭菜单
         document.addEventListener('click', removeContextMenu);
+        document.addEventListener('touchstart', removeContextMenu);
       }
       
       // 删除右键菜单
@@ -902,6 +961,7 @@ export function appPageTemplate(username) {
           menu.remove();
         }
         document.removeEventListener('click', removeContextMenu);
+        document.removeEventListener('touchstart', removeContextMenu);
       }
       
       // 复制到剪贴板
