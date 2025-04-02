@@ -101,6 +101,27 @@ export function appPageTemplate(username) {
         background: #d32f2f;
       }
       
+      button.small-btn {
+        padding: 4px 8px;
+        font-size: 12px;
+      }
+      
+      button.copy-btn {
+        background: #6c757d;
+      }
+      
+      button.copy-btn:hover {
+        background: #5a6268;
+      }
+      
+      button.delete-btn {
+        background: var(--danger-color);
+      }
+      
+      button.delete-btn:hover {
+        background: #d32f2f;
+      }
+      
       .file-list {
         list-style: none;
         padding: 0;
@@ -216,6 +237,14 @@ export function appPageTemplate(username) {
       
       .message-content {
         word-break: break-word;
+        margin-bottom: 5px;
+      }
+      
+      .message-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 5px;
+        margin-top: 5px;
       }
       
       .message-form {
@@ -236,26 +265,6 @@ export function appPageTemplate(username) {
         border-color: var(--primary-color);
       }
       
-      /* Context Menu Styles */
-      .context-menu {
-        position: fixed;
-        z-index: 1000;
-        background: white;
-        border-radius: 5px;
-        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
-        overflow: hidden;
-      }
-      
-      .context-menu-item {
-        padding: 8px 15px;
-        cursor: pointer;
-        transition: background 0.2s;
-      }
-      
-      .context-menu-item:hover {
-        background: var(--secondary-color);
-      }
-      
       /* Toast Message */
       #toast {
         position: fixed;
@@ -269,9 +278,41 @@ export function appPageTemplate(username) {
         z-index: 1001;
       }
       
-      /* 长按高亮样式 */
-      .touch-feedback {
-        background-color: rgba(0, 102, 255, 0.1);
+      /* 确认对话框样式 */
+      .confirm-dialog {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: rgba(0, 0, 0, 0.5);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 1002;
+      }
+      
+      .confirm-dialog-content {
+        background-color: white;
+        padding: 20px;
+        border-radius: 10px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        width: 90%;
+        max-width: 400px;
+      }
+      
+      .confirm-dialog-title {
+        margin-top: 0;
+        margin-bottom: 15px;
+        font-size: 18px;
+        font-weight: 600;
+      }
+      
+      .confirm-dialog-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+        margin-top: 20px;
       }
       
       /* Responsive */
@@ -343,7 +384,7 @@ export function appPageTemplate(username) {
           <line x1="16" y1="17" x2="8" y2="17"></line>
           <polyline points="10 9 9 9 8 9"></polyline>
         </svg>
-        Your Files
+        Your Files (Recent 10)
       </h2>
       <ul id="fileList" class="file-list">
         <li class="file-item">
@@ -476,12 +517,16 @@ export function appPageTemplate(username) {
             return new Date(b.lastModified) - new Date(a.lastModified);
           });
           
+          // 只显示最近的10个文件
+          const recentFiles = data.files.slice(0, 10);
+          
           // 渲染每个文件
-          data.files.forEach((file, index) => {
-            console.log(\`渲染文件 \${index+1}/\${data.files.length}: \${file.name}\`);
+          recentFiles.forEach((file, index) => {
+            console.log(\`渲染文件 \${index+1}/\${recentFiles.length}: \${file.name}\`);
             
             const li = document.createElement('li');
             li.className = 'file-item';
+            li.dataset.fileId = file.id;
             
             const fileInfo = document.createElement('div');
             fileInfo.className = 'file-info';
@@ -504,7 +549,13 @@ export function appPageTemplate(username) {
             downloadBtn.textContent = 'Download';
             downloadBtn.addEventListener('click', () => downloadFile(file.id));
             
+            const deleteBtn = document.createElement('button');
+            deleteBtn.textContent = 'Delete';
+            deleteBtn.className = 'delete-btn';
+            deleteBtn.addEventListener('click', () => showDeleteFileConfirm(file.id, file.name));
+            
             fileActions.appendChild(downloadBtn);
+            fileActions.appendChild(deleteBtn);
             
             li.appendChild(fileInfo);
             li.appendChild(fileActions);
@@ -521,6 +572,53 @@ export function appPageTemplate(username) {
           if (fileListEl) {
             fileListEl.innerHTML = \`<li class="file-item"><div class="file-info"><h3 class="file-name">Error loading files: \${err.message}</h3></div></li>\`;
           }
+        }
+      }
+      
+      // 显示删除文件确认对话框
+      function showDeleteFileConfirm(fileId, fileName) {
+        showConfirmDialog(
+          'Delete File', 
+          \`Are you sure you want to delete "\${fileName}"? This action cannot be undone.\`, 
+          () => deleteFile(fileId)
+        );
+      }
+      
+      // 删除文件
+      async function deleteFile(fileId) {
+        try {
+          const response = await authenticatedFetch(\`/api/files/delete/\${fileId}\`, {
+            method: 'DELETE'
+          });
+          
+          if (!response.ok) {
+            console.error(\`删除文件失败，状态码: \${response.status}\`);
+            showToast(\`Failed to delete file: \${response.status}\`);
+            return;
+          }
+          
+          const data = await response.json();
+          
+          if (data.success) {
+            // 从DOM中移除文件项
+            const fileItem = document.querySelector(\`li[data-file-id="\${fileId}"]\`);
+            if (fileItem) {
+              fileItem.remove();
+            }
+            
+            showToast('File deleted successfully');
+            
+            // 重新加载文件列表
+            setTimeout(() => {
+              loadFiles();
+            }, 500);
+          } else {
+            console.error('删除文件失败:', data.error);
+            showToast(\`Failed to delete file: \${data.error || 'Unknown error'}\`);
+          }
+        } catch (err) {
+          console.error('删除文件错误:', err);
+          showToast(\`Error deleting file: \${err.message}\`);
         }
       }
       
@@ -817,6 +915,32 @@ export function appPageTemplate(username) {
         }
       }
       
+      // 删除消息
+      async function deleteMessage(messageId) {
+        try {
+          // 从本地存储中删除
+          const messages = JSON.parse(localStorage.getItem('syncMessages') || '[]');
+          const updatedMessages = messages.filter(msg => msg.id !== messageId);
+          localStorage.setItem('syncMessages', JSON.stringify(updatedMessages));
+          
+          // 从服务器删除
+          const response = await authenticatedFetch(`/api/messages/delete/${messageId}`, {
+            method: 'DELETE'
+          });
+          
+          if (!response.ok) {
+            console.error(`删除消息失败，状态码: ${response.status}`);
+          }
+          
+          // 更新UI
+          renderMessages(updatedMessages);
+          showToast('Message deleted');
+        } catch (err) {
+          console.error('删除消息错误:', err);
+          showToast(`Error deleting message: ${err.message}`);
+        }
+      }
+      
       // 渲染消息 UI
       function renderMessages(messages) {
         const deviceId = getDeviceId();
@@ -826,13 +950,13 @@ export function appPageTemplate(username) {
         if (messages.length === 0) {
           const emptyItem = document.createElement('li');
           emptyItem.className = 'message-item other';
-          emptyItem.innerHTML = \`
+          emptyItem.innerHTML = `
             <div class="message-header">
               <span>System</span>
-              <span>\${formatDate(new Date().toISOString())}</span>
+              <span>${formatDate(new Date().toISOString())}</span>
             </div>
             <div class="message-content">No messages yet. Start the conversation!</div>
-          \`;
+          `;
           messageList.appendChild(emptyItem);
           return;
         }
@@ -841,57 +965,31 @@ export function appPageTemplate(username) {
           const messageItem = document.createElement('li');
           const isSelf = msg.deviceId === deviceId;
           
-          messageItem.className = \`message-item \${isSelf ? 'self' : 'other'}\`;
-          messageItem.dataset.messageText = msg.text; // 将消息文本存储在数据属性中，用于复制
+          messageItem.className = `message-item ${isSelf ? 'self' : 'other'}`;
+          messageItem.dataset.messageId = msg.id; // 将消息ID存储在数据属性中
           
-          messageItem.innerHTML = \`
+          messageItem.innerHTML = `
             <div class="message-header">
-              <span>\${isSelf ? 'You (This Device)' : 'Device ' + msg.deviceId.substring(0, 8)}</span>
-              <span>\${formatDate(msg.timestamp)}</span>
+              <span>${isSelf ? 'You (This Device)' : 'Device ' + msg.deviceId.substring(0, 8)}</span>
+              <span>${formatDate(msg.timestamp)}</span>
             </div>
-            <div class="message-content">\${escapeHTML(msg.text)}</div>
-          \`;
+            <div class="message-content">${escapeHTML(msg.text)}</div>
+            <div class="message-actions">
+              <button class="small-btn copy-btn">Copy</button>
+              <button class="small-btn delete-btn">Delete</button>
+            </div>
+          `;
           
-          // 添加右键菜单事件 (对于桌面设备)
-          messageItem.addEventListener('contextmenu', function(e) {
-            e.preventDefault();
-            showContextMenu(e, messageItem.dataset.messageText);
+          // 添加复制按钮事件
+          const copyBtn = messageItem.querySelector('.copy-btn');
+          copyBtn.addEventListener('click', function() {
+            copyToClipboard(msg.text);
           });
           
-          // 添加长按事件 (对于移动设备)
-          let touchTimer;
-          let touchDuration = 700; // 长按时间（毫秒）
-          
-          messageItem.addEventListener('touchstart', function(e) {
-            // 记录开始触摸时间
-            touchTimer = setTimeout(function() {
-              // 阻止默认长按行为（如选择文本）
-              e.preventDefault();
-              
-              // 显示视觉反馈
-              messageItem.classList.add('touch-feedback');
-              
-              // 使用触摸坐标显示菜单
-              const touch = e.touches[0];
-              showContextMenu({
-                pageX: touch.pageX,
-                pageY: touch.pageY
-              }, messageItem.dataset.messageText);
-            }, touchDuration);
-          });
-          
-          messageItem.addEventListener('touchend', function() {
-            // 触摸结束时清除计时器
-            clearTimeout(touchTimer);
-            // 移除视觉反馈
-            messageItem.classList.remove('touch-feedback');
-          });
-          
-          messageItem.addEventListener('touchmove', function() {
-            // 如果触摸移动，取消长按计时器
-            clearTimeout(touchTimer);
-            // 移除视觉反馈
-            messageItem.classList.remove('touch-feedback');
+          // 添加删除按钮事件
+          const deleteBtn = messageItem.querySelector('.delete-btn');
+          deleteBtn.addEventListener('click', function() {
+            showDeleteMessageConfirm(msg.id);
           });
           
           messageList.appendChild(messageItem);
@@ -901,67 +999,63 @@ export function appPageTemplate(username) {
         messageList.scrollTop = messageList.scrollHeight;
       }
       
-      // 显示右键菜单
-      function showContextMenu(event, messageText) {
-        event.preventDefault();
-        
-        // 删除任何现有的右键菜单
-        removeContextMenu();
-        
-        // 创建菜单
-        const menu = document.createElement('div');
-        menu.id = 'context-menu';
-        menu.className = 'context-menu';
-        
-        // 创建复制选项
-        const copyItem = document.createElement('div');
-        copyItem.className = 'context-menu-item';
-        copyItem.textContent = 'Copy message';
-        copyItem.addEventListener('click', () => {
-          copyToClipboard(messageText);
-          removeContextMenu();
-        });
-        
-        // 添加菜单项到菜单
-        menu.appendChild(copyItem);
-        
-        // 设置菜单位置
-        menu.style.left = event.pageX + "px";
-        menu.style.top = event.pageY + "px";
-        
-        // 确保菜单不会超出屏幕边界
-        setTimeout(() => {
-          const menuRect = menu.getBoundingClientRect();
-          const windowWidth = window.innerWidth;
-          const windowHeight = window.innerHeight;
-          
-          // 检查右边界
-          if (menuRect.right > windowWidth) {
-            menu.style.left = (windowWidth - menuRect.width - 10) + "px";
-          }
-          
-          // 检查下边界
-          if (menuRect.bottom > windowHeight) {
-            menu.style.top = (windowHeight - menuRect.height - 10) + "px";
-          }
-        }, 0);
-        
-        // 添加到文档
-        document.body.appendChild(menu);
-        
-        // 点击其他区域关闭菜单
-        document.addEventListener('click', removeContextMenu);
-        document.addEventListener('touchstart', removeContextMenu);
+      // 显示删除消息确认对话框
+      function showDeleteMessageConfirm(messageId) {
+        showConfirmDialog(
+          'Delete Message', 
+          'Are you sure you want to delete this message? This action cannot be undone.', 
+          () => deleteMessage(messageId)
+        );
       }
       
-      // 删除右键菜单
-      function removeContextMenu() {
-        const menu = document.getElementById('context-menu');
-        if (menu) {
-          menu.remove();
+      // 显示确认对话框
+      function showConfirmDialog(title, message, confirmCallback) {
+        // 删除任何现有的确认对话框
+        const existingDialog = document.getElementById('confirm-dialog');
+        if (existingDialog) {
+          existingDialog.remove();
         }
-        document.removeEventListener('click', removeContextMenu);
-        document.removeEventListener('touchstart', removeContextMenu);
+        
+        // 创建确认对话框
+        const dialog = document.createElement('div');
+        dialog.id = 'confirm-dialog';
+        dialog.className = 'confirm-dialog';
+        
+        const dialogContent = document.createElement('div');
+        dialogContent.className = 'confirm-dialog-content';
+        
+        const dialogTitle = document.createElement('h3');
+        dialogTitle.className = 'confirm-dialog-title';
+        dialogTitle.textContent = title;
+        
+        const dialogMessage = document.createElement('p');
+        dialogMessage.textContent = message;
+        
+        const dialogActions = document.createElement('div');
+        dialogActions.className = 'confirm-dialog-actions';
+        
+        const cancelBtn = document.createElement('button');
+        cancelBtn.textContent = 'Cancel';
+        cancelBtn.style.background = '#999';
+        cancelBtn.addEventListener('click', () => dialog.remove());
+        
+        const confirmBtn = document.createElement('button');
+        confirmBtn.textContent = 'Confirm';
+        confirmBtn.className = 'delete-btn';
+        confirmBtn.addEventListener('click', () => {
+          confirmCallback();
+          dialog.remove();
+        });
+        
+        dialogActions.appendChild(cancelBtn);
+        dialogActions.appendChild(confirmBtn);
+        
+        dialogContent.appendChild(dialogTitle);
+        dialogContent.appendChild(dialogMessage);
+        dialogContent.appendChild(dialogActions);
+        
+        dialog.appendChild(dialogContent);
+        document.body.appendChild(dialog);
       }
       
       // 复制到剪贴板
