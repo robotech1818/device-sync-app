@@ -924,7 +924,9 @@ export function scriptsComponent() {
             const lastSync = localStorage.getItem('lastSyncTime') || 0;
             
             // 发送变更请求，添加缓存破坏参数
-            const response = await authenticatedFetch(`/api/files/changes?since=${lastSync}&_=${Date.now()}`);
+            const url = "/api/files/changes?since=" + lastSync + "&_=" + Date.now();
+            const response = await authenticatedFetch(url);
+
             
             if (response.status === 401) {
               console.error('Token expired, redirecting to login');
