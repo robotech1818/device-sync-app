@@ -21,54 +21,74 @@ import {
 import { loginPageTemplate } from './templates/login';
 import { appPageTemplate } from './templates/app';
 
-// Worker entry function
+// 静态页面缓存
+const staticCache = {
+  loginPage: null,
+  loginPageTime: 0,
+  appPages: new Map(), // 用户名 -> {content, timestamp}
+};
+
+// 缓存有效期(10分钟)
+const CACHE_TTL = 10 * 60 * 1000;
+
+// Worker入口函数
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     const path = url.pathname;
     
-    // Route configuration
-    // Login page
+    // 登录页面 - 使用缓存
     if (path === '/' || path === '/login') {
-      return new Response(loginPageTemplate(), {
-        headers: { 'Content-Type': 'text/html;charset=UTF-8' }
-      });
+      const now = Date.now();
+      
+      // 如果缓存不存在或已过期，重新生成
+      if (!staticCache.loginPage || (now - staticCache.loginPageTime > CACHE_TTL)) {
+        staticCache.loginPage = new Response(loginPageTemplate(), {
+          headers: { 
+            'Content-Type': 'text/html;charset=UTF-8',
+            'Cache-Control': 'private, max-age=600' // 浏览器端缓存10分钟
+          }
+        });
+        staticCache.loginPageTime = now;
+      }
+      
+      return staticCache.loginPage;
     }
     
-    // Handle login request
+    // 处理登录请求
     if (path === '/api/login' && request.method === 'POST') {
       return handleLogin(request, env);
     }
     
-    // Handle logout request
+    // 处理注销请求
     if (path === '/api/logout' && request.method === 'POST') {
       return handleLogout(request, env);
     }
     
-    // Handle token refresh request
+    // 处理令牌刷新请求
     if (path === '/api/refresh-token' && request.method === 'POST') {
       return handleRefreshToken(request, env);
     }
     
-    // Handle force relogin (admin only)
+    // 处理强制重新登录 (仅管理员)
     if (path === '/api/admin/force-relogin' && request.method === 'POST') {
       return handleForceRelogin(request, env);
     }
     
-    // All paths below require authentication
+    // 以下路径需要认证
     const token = getAuthToken(request);
     if (!token) {
       return new Response('Unauthorized: Token missing', { status: 401 });
     }
     
     try {
-      // Validate user
+      // 验证用户
       const username = await validateToken(token, env);
       if (!username) {
         return new Response('Unauthorized: Invalid token', { status: 401 });
       }
       
-      // Route API requests
+      // 路由API请求
       if (path === '/api/files/list') {
         return listFiles(username, env);
       }
@@ -82,7 +102,6 @@ export default {
         return downloadFile(fileId, username, env);
       }
       
-      // 删除文件路由
       if (path.startsWith('/api/files/delete/') && request.method === 'DELETE') {
         const fileId = path.split('/').pop();
         return deleteFile(fileId, username, env);
@@ -106,25 +125,42 @@ export default {
         return syncMessage(request, username, env);
       }
       
-      // 删除消息路由
       if (path.startsWith('/api/messages/delete/') && request.method === 'DELETE') {
         const messageId = path.split('/').pop();
         return deleteMessage(messageId, username, env);
       }
       
-      // 清除所有消息端点
       if (path === '/api/messages/clear' && request.method === 'POST') {
         return clearMessages(username, env);
       }
       
-      // App main page
+      // 应用主页 - 使用缓存
       if (path === '/app') {
-        return new Response(appPageTemplate(username), {
-          headers: { 'Content-Type': 'text/html;charset=UTF-8' }
-        });
+        const now = Date.now();
+        
+        const cachedPage = staticCache.appPages.get(username);
+        
+        // 如果缓存不存在或已过期，重新生成
+        if (!cachedPage || (now - cachedPage.timestamp > CACHE_TTL)) {
+          const pageContent = new Response(appPageTemplate(username), {
+            headers: { 
+              'Content-Type': 'text/html;charset=UTF-8',
+              'Cache-Control': 'private, max-age=600' // 浏览器端缓存10分钟
+            }
+          });
+          
+          staticCache.appPages.set(username, {
+            content: pageContent,
+            timestamp: now
+          });
+          
+          return pageContent;
+        }
+        
+        return cachedPage.content;
       }
       
-      // 404 - Path not found
+// 404 - 路径未找到
       return new Response('Not Found', { status: 404 });
     } catch (err) {
       return new Response(`Authentication error: ${err.message}`, { status: 401 });
@@ -132,37 +168,29 @@ export default {
   }
 };
 
-// Get file changes (for polling sync)
+// 获取文件变更（用于轮询同步） - 优化实现
 async function getFileChanges(since, username, env) {
   since = parseInt(since);
   
   try {
-    // Use list to get files with metadata
-    const prefix = `file:${username}:`;
-    const metaPrefix = `${prefix}.*:meta`;
+    // 首先尝试从文件索引获取数据
+    const indexKey = `fileindex:${username}`;
+    const fileIndex = await env.SYNC_KV.get(indexKey, 'json') || [];
     
-    // Get all file metadata from KV
-    const filesList = await env.SYNC_KV.list({ prefix: metaPrefix });
-    
-    const changes = [];
-    const promises = filesList.keys.map(async (key) => {
-      const metadata = await env.SYNC_KV.get(key.name, 'json');
-      if (metadata) {
-        // Convert lastModified to timestamp for comparison
-        const modifiedTime = new Date(metadata.lastModified).getTime();
-        if (modifiedTime > since) {
-          changes.push(metadata);
-        }
-      }
+    // 在 JavaScript 中过滤出修改过的文件
+    const changes = fileIndex.filter(file => {
+      const modifiedTime = new Date(file.lastModified).getTime();
+      return modifiedTime > since;
     });
-    
-    await Promise.all(promises);
     
     return new Response(JSON.stringify({
       success: true,
       changes: changes
     }), {
-      headers: { 'Content-Type': 'application/json' }
+      headers: { 
+        'Content-Type': 'application/json',
+        'Cache-Control': 'private, max-age=60' // 缓存1分钟
+      }
     });
   } catch (err) {
     return new Response(JSON.stringify({
