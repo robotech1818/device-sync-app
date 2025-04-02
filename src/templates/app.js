@@ -278,7 +278,7 @@ export function appPageTemplate(username) {
         z-index: 1001;
       }
       
-      /* 确认对话框样式 */
+      /* Confirm Dialog Styles */
       .confirm-dialog {
         position: fixed;
         top: 0;
@@ -457,7 +457,7 @@ export function appPageTemplate(username) {
         }
         
         const headers = options.headers || {};
-        headers['Authorization'] = \`Bearer \${currentToken}\`;
+        headers['Authorization'] = "Bearer " + currentToken;
         
         return fetch(url, { ...options, headers });
       }
@@ -465,64 +465,63 @@ export function appPageTemplate(username) {
       // Get file list
       async function loadFiles() {
         try {
-          console.log('正在获取文件列表...');
+          console.log('Loading file list...');
           
-          // 清除缓存的时间戳以确保获取最新数据
-          // 避免浏览器缓存导致的问题
+          // Add timestamp to avoid browser caching
           const timestamp = new Date().getTime();
-          const response = await authenticatedFetch(\`/api/files/list?_=\${timestamp}\`);
+          const response = await authenticatedFetch("/api/files/list?_=" + timestamp);
           
           if (!response.ok) {
-            console.error(\`文件列表请求失败，状态码: \${response.status}\`);
-            throw new Error(\`Server responded with \${response.status}\`);
+            console.error("File list request failed, status code: " + response.status);
+            throw new Error("Server responded with " + response.status);
           }
           
           let data;
           try {
             const text = await response.text();
-            console.log('API返回原始数据:', text);
+            console.log('API raw response:', text);
             data = JSON.parse(text);
           } catch (parseError) {
-            console.error('解析JSON响应失败:', parseError);
+            console.error('JSON parsing failed:', parseError);
             throw parseError;
           }
           
-          console.log('解析后的文件列表数据:', data);
+          console.log('Parsed file list data:', data);
           
           const fileListEl = document.getElementById('fileList');
           if (!fileListEl) {
-            console.error('找不到fileList元素');
+            console.error('fileList element not found');
             return;
           }
           
-          // 清空现有列表
+          // Clear existing list
           fileListEl.innerHTML = '';
           
           if (!data.success) {
-            console.error('API返回失败:', data.error);
-            fileListEl.innerHTML = \`<li class="file-item"><div class="file-info"><h3 class="file-name">Error: \${data.error || 'Unknown error'}</h3></div></li>\`;
+            console.error('API returned error:', data.error);
+            fileListEl.innerHTML = '<li class="file-item"><div class="file-info"><h3 class="file-name">Error: ' + (data.error || 'Unknown error') + '</h3></div></li>';
             return;
           }
           
           if (!data.files || !Array.isArray(data.files) || data.files.length === 0) {
-            console.log('没有找到文件');
+            console.log('No files found');
             fileListEl.innerHTML = '<li class="file-item"><div class="file-info"><h3 class="file-name">No files found</h3></div></li>';
             return;
           }
           
-          console.log(\`找到 \${data.files.length} 个文件，开始渲染\`);
+          console.log('Found ' + data.files.length + ' files, starting render');
           
-          // 按最近修改时间排序
+          // Sort by most recent modification
           data.files.sort((a, b) => {
             return new Date(b.lastModified) - new Date(a.lastModified);
           });
           
-          // 只显示最近的10个文件
+          // Only display the most recent 10 files
           const recentFiles = data.files.slice(0, 10);
           
-          // 渲染每个文件
+          // Render each file
           recentFiles.forEach((file, index) => {
-            console.log(\`渲染文件 \${index+1}/\${recentFiles.length}: \${file.name}\`);
+            console.log('Rendering file ' + (index+1) + '/' + recentFiles.length + ': ' + file.name);
             
             const li = document.createElement('li');
             li.className = 'file-item';
@@ -537,7 +536,7 @@ export function appPageTemplate(username) {
             
             const fileDetails = document.createElement('p');
             fileDetails.className = 'file-details';
-            fileDetails.textContent = \`Type: \${file.type || 'unknown'} | Size: \${formatFileSize(file.size || 0)} | Modified: \${formatDate(file.lastModified || new Date())}\`;
+            fileDetails.textContent = 'Type: ' + (file.type || 'unknown') + ' | Size: ' + formatFileSize(file.size || 0) + ' | Modified: ' + formatDate(file.lastModified || new Date());
             
             fileInfo.appendChild(fileName);
             fileInfo.appendChild(fileDetails);
@@ -563,76 +562,76 @@ export function appPageTemplate(username) {
             fileListEl.appendChild(li);
           });
           
-          // 更新上次同步时间
+          // Update last sync time
           localStorage.setItem('lastSyncTime', Date.now());
-          console.log('文件列表加载完成');
+          console.log('File list loaded successfully');
         } catch (err) {
-          console.error('加载文件列表错误:', err);
+          console.error('Error loading file list:', err);
           const fileListEl = document.getElementById('fileList');
           if (fileListEl) {
-            fileListEl.innerHTML = \`<li class="file-item"><div class="file-info"><h3 class="file-name">Error loading files: \${err.message}</h3></div></li>\`;
+            fileListEl.innerHTML = '<li class="file-item"><div class="file-info"><h3 class="file-name">Error loading files: ' + err.message + '</h3></div></li>';
           }
         }
       }
       
-      // 显示删除文件确认对话框
+      // Show delete file confirmation dialog
       function showDeleteFileConfirm(fileId, fileName) {
         showConfirmDialog(
           'Delete File', 
-          \`Are you sure you want to delete "\${fileName}"? This action cannot be undone.\`, 
+          'Are you sure you want to delete "' + fileName + '"? This action cannot be undone.', 
           () => deleteFile(fileId)
         );
       }
       
-      // 删除文件
+      // Delete file
       async function deleteFile(fileId) {
         try {
-          const response = await authenticatedFetch(\`/api/files/delete/\${fileId}\`, {
+          const response = await authenticatedFetch("/api/files/delete/" + fileId, {
             method: 'DELETE'
           });
           
           if (!response.ok) {
-            console.error(\`删除文件失败，状态码: \${response.status}\`);
-            showToast(\`Failed to delete file: \${response.status}\`);
+            console.error("File deletion failed, status code: " + response.status);
+            showToast("Failed to delete file: " + response.status);
             return;
           }
           
           const data = await response.json();
           
           if (data.success) {
-            // 从DOM中移除文件项
-            const fileItem = document.querySelector(\`li[data-file-id="\${fileId}"]\`);
+            // Remove file item from DOM
+            const fileItem = document.querySelector('li[data-file-id="' + fileId + '"]');
             if (fileItem) {
               fileItem.remove();
             }
             
             showToast('File deleted successfully');
             
-            // 重新加载文件列表
+            // Reload file list
             setTimeout(() => {
               loadFiles();
             }, 500);
           } else {
-            console.error('删除文件失败:', data.error);
-            showToast(\`Failed to delete file: \${data.error || 'Unknown error'}\`);
+            console.error('File deletion failed:', data.error);
+            showToast("Failed to delete file: " + (data.error || 'Unknown error'));
           }
         } catch (err) {
-          console.error('删除文件错误:', err);
-          showToast(\`Error deleting file: \${err.message}\`);
+          console.error('Error deleting file:', err);
+          showToast("Error deleting file: " + err.message);
         }
       }
       
       // Download file
       function downloadFile(fileId) {
-        window.open(\`/api/files/download/\${fileId}?token=\${token}\`);
+        window.open("/api/files/download/" + fileId + "?token=" + token);
       }
       
       // Upload file
       async function uploadFile(file) {
         try {
-          console.log('开始上传文件:', file.name, '大小:', file.size, '类型:', file.type);
+          console.log('Starting file upload:', file.name, 'size:', file.size, 'type:', file.type);
           
-          // 显示上传中提示
+          // Show uploading indicator
           const dropzone = document.getElementById('dropzone');
           const originalText = dropzone.innerHTML;
           dropzone.innerHTML = '<p>Uploading... Please wait</p>';
@@ -640,65 +639,65 @@ export function appPageTemplate(username) {
           const formData = new FormData();
           formData.append('file', file);
           
-          // 使用authenticatedFetch函数
+          // Use authenticatedFetch function
           const response = await authenticatedFetch('/api/files/upload', {
             method: 'POST',
             body: formData
           });
           
-          // 恢复原始提示
+          // Restore original text
           dropzone.innerHTML = originalText;
           
-          // 检查响应状态
+          // Check response status
           if (!response.ok) {
-            console.error(\`上传失败，状态码: \${response.status}\`);
-            alert(\`Upload failed with status: \${response.status}\`);
+            console.error("Upload failed, status code: " + response.status);
+            alert("Upload failed with status: " + response.status);
             return;
           }
           
           let data;
           try {
             const text = await response.text();
-            console.log('上传API返回原始数据:', text);
+            console.log('Upload API raw response:', text);
             data = JSON.parse(text);
           } catch (parseError) {
-            console.error('解析JSON响应失败:', parseError);
+            console.error('JSON parsing failed:', parseError);
             alert('Error parsing server response');
             return;
           }
           
-          console.log('解析后的上传响应:', data);
+          console.log('Parsed upload response:', data);
           
           if (data.success) {
-            console.log('文件上传成功:', data.fileId);
+            console.log('File upload successful:', data.fileId);
             
-            // 显示成功通知
+            // Show success notification
             showToast('File uploaded successfully!');
             
-            // 确保等待一小段时间后再重新加载文件列表
-            // 这有助于确保服务器有足够时间处理文件
-            console.log('延迟1秒后刷新文件列表...');
+            // Ensure we wait a bit before reloading the file list
+            // This helps ensure the server has time to process the file
+            console.log('Delaying 1 second before refreshing file list...');
             setTimeout(() => {
-              console.log('开始刷新文件列表');
+              console.log('Starting file list refresh');
               loadFiles().then(() => {
-                console.log('文件列表刷新完成');
+                console.log('File list refresh complete');
               }).catch(err => {
-                console.error('刷新文件列表失败:', err);
+                console.error('Error refreshing file list:', err);
               });
             }, 1000);
           } else {
-            console.error('上传失败:', data.error);
-            alert(\`Upload failed: \${data.error || 'Unknown error'}\`);
+            console.error('Upload failed:', data.error);
+            alert("Upload failed: " + (data.error || 'Unknown error'));
           }
         } catch (err) {
-          console.error('上传文件错误:', err);
-          alert(\`Error during upload: \${err.message}\`);
+          console.error('Error uploading file:', err);
+          alert("Error during upload: " + err.message);
           
-          // 恢复原始提示
+          // Restore original text
           const dropzone = document.getElementById('dropzone');
           dropzone.innerHTML = '<p>Drag and drop files here or click to upload</p><input type="file" id="fileInput">';
           
-          // 重新初始化文件输入框
+          // Reinitialize file input
           const fileInput = document.getElementById('fileInput');
           if (fileInput) {
             fileInput.addEventListener('change', () => {
@@ -723,18 +722,18 @@ export function appPageTemplate(username) {
         return date.toLocaleString();
       }
       
-      // 重新初始化拖放区域
+      // Reinitialize dropzone
       function reinitializeDropzone() {
-        console.log('重新初始化拖放区域');
+        console.log('Reinitializing dropzone');
         const dropzone = document.getElementById('dropzone');
         const fileInput = document.getElementById('fileInput');
         
         if (!dropzone || !fileInput) {
-          console.error('找不到dropzone或fileInput元素');
+          console.error('dropzone or fileInput element not found');
           return;
         }
         
-        // 移除所有现有事件监听器
+        // Remove all existing event listeners
         const newDropzone = dropzone.cloneNode(true);
         dropzone.parentNode.replaceChild(newDropzone, dropzone);
         
@@ -743,11 +742,11 @@ export function appPageTemplate(username) {
         newFileInput.id = 'fileInput';
         newFileInput.style.display = 'none';
         
-        // 确保dropzone内容正确
+        // Ensure dropzone content is correct
         newDropzone.innerHTML = '<p>Drag and drop files here or click to upload</p>';
         newDropzone.appendChild(newFileInput);
         
-        // 点击上传
+        // Click to upload
         newDropzone.addEventListener('click', () => {
           newFileInput.click();
         });
@@ -758,7 +757,7 @@ export function appPageTemplate(username) {
           }
         });
         
-        // 拖放上传
+        // Drag and drop upload
         newDropzone.addEventListener('dragover', (e) => {
           e.preventDefault();
           e.stopPropagation();
@@ -781,26 +780,26 @@ export function appPageTemplate(username) {
           }
         });
         
-        console.log('拖放区域重新初始化完成');
+        console.log('Dropzone reinitialization complete');
       }
       
       // Messages management
       const MAX_MESSAGES = 50; // Maximum number of messages to store
       
-      // 初始化消息功能
+      // Initialize messaging functionality
       async function initMessaging() {
         const messageForm = document.getElementById('messageForm');
         const messageInput = document.getElementById('messageInput');
         const messageList = document.getElementById('messageList');
         const clearMessagesBtn = document.getElementById('clearMessagesBtn');
         
-        // 首先加载本地消息
+        // First load local messages
         const localMessages = JSON.parse(localStorage.getItem('syncMessages') || '[]');
         
-        // 从服务器获取消息并合并
+        // Get and merge server messages
         await loadAndMergeServerMessages(localMessages);
         
-        // 发送消息事件处理
+        // Send message event handling
         messageForm.addEventListener('submit', (e) => {
           e.preventDefault();
           const messageText = messageInput.value.trim();
@@ -810,45 +809,45 @@ export function appPageTemplate(username) {
           }
         });
         
-        // 清除消息事件处理
+        // Clear messages event handling
         clearMessagesBtn.addEventListener('click', async () => {
           if (confirm('Are you sure you want to clear all messages?')) {
             localStorage.removeItem('syncMessages');
             try {
-              // 也清除服务器上的消息
+              // Also clear messages on server
               await authenticatedFetch('/api/messages/clear', {
                 method: 'POST'
               });
             } catch (err) {
-              console.error('清除服务器消息失败:', err);
+              console.error('Error clearing server messages:', err);
             }
             renderMessages([]);
           }
         });
       }
       
-      // 从服务器加载消息并与本地消息合并
+      // Load and merge server messages with local messages
       async function loadAndMergeServerMessages(localMessages) {
         try {
           const response = await authenticatedFetch('/api/messages');
           if (response.ok) {
             const data = await response.json();
             if (data.success && data.messages) {
-              // 合并本地和服务器消息，避免重复
+              // Merge local and server messages, avoiding duplicates
               const serverMessages = data.messages;
               const allMessages = [...localMessages];
               
-              // 添加服务器上有但本地没有的消息
+              // Add messages that exist on server but not locally
               serverMessages.forEach(serverMsg => {
                 if (!allMessages.some(localMsg => localMsg.id === serverMsg.id)) {
                   allMessages.push(serverMsg);
                 }
               });
               
-              // 按时间排序
+              // Sort by timestamp
               allMessages.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
               
-              // 保存合并后的消息
+              // Save merged messages
               localStorage.setItem('syncMessages', JSON.stringify(allMessages));
               renderMessages(allMessages);
             } else {
@@ -858,12 +857,12 @@ export function appPageTemplate(username) {
             renderMessages(localMessages);
           }
         } catch (err) {
-          console.error('加载服务器消息失败:', err);
+          console.error('Error loading server messages:', err);
           renderMessages(localMessages);
         }
       }
       
-      // 发送新消息
+      // Send new message
       async function sendMessage(text) {
         const deviceId = getDeviceId();
         const message = {
@@ -873,25 +872,25 @@ export function appPageTemplate(username) {
           timestamp: new Date().toISOString()
         };
         
-        // 添加到localStorage
+        // Add to localStorage
         const messages = JSON.parse(localStorage.getItem('syncMessages') || '[]');
         messages.push(message);
         
-        // 限制消息数量
+        // Limit number of messages
         if (messages.length > MAX_MESSAGES) {
           messages.splice(0, messages.length - MAX_MESSAGES);
         }
         
         localStorage.setItem('syncMessages', JSON.stringify(messages));
         
-        // 更新UI
+        // Update UI
         renderMessages(messages);
         
-        // 同步到服务器
+        // Sync to server
         await syncMessageToServer(message);
       }
       
-      // 同步消息到服务器
+      // Sync message to server
       async function syncMessageToServer(message) {
         try {
           const response = await authenticatedFetch('/api/messages/sync', {
@@ -906,42 +905,42 @@ export function appPageTemplate(username) {
           });
           
           if (!response.ok) {
-            console.error('消息同步失败:', await response.text());
+            console.error('Message sync failed:', await response.text());
           } else {
-            console.log('消息成功同步到服务器');
+            console.log('Message successfully synced to server');
           }
         } catch (err) {
-          console.error('消息同步错误:', err);
+          console.error('Message sync error:', err);
         }
       }
       
-      // 在 app.js 文件中修改 deleteMessage 函数
+      // Delete message
       async function deleteMessage(messageId) {
         try {
-          // 从本地存储中删除
+          // Delete from local storage
           const messages = JSON.parse(localStorage.getItem('syncMessages') || '[]');
           const updatedMessages = messages.filter(msg => msg.id !== messageId);
           localStorage.setItem('syncMessages', JSON.stringify(updatedMessages));
           
-          // 从服务器删除 - 修复正则表达式错误
+          // Delete from server
           const response = await authenticatedFetch("/api/messages/delete/" + messageId, {
             method: 'DELETE'
           });
           
           if (!response.ok) {
-            console.error(`Message deletion failed, status code: ${response.status}`);
+            console.error("Message deletion failed, status code: " + response.status);
           }
           
-          // 更新UI
+          // Update UI
           renderMessages(updatedMessages);
           showToast('Message deleted');
         } catch (err) {
-          console.error('删除消息错误:', err);
-          showToast(`Error deleting message: ${err.message}`);
+          console.error('Error deleting message:', err);
+          showToast("Error deleting message: " + err.message);
         }
       }
       
-      // 渲染消息 UI
+      // Render messages UI
       function renderMessages(messages) {
         const deviceId = getDeviceId();
         const messageList = document.getElementById('messageList');
@@ -966,7 +965,7 @@ export function appPageTemplate(username) {
           const isSelf = msg.deviceId === deviceId;
           
           messageItem.className = `message-item ${isSelf ? 'self' : 'other'}`;
-          messageItem.dataset.messageId = msg.id; // 将消息ID存储在数据属性中
+          messageItem.dataset.messageId = msg.id; // Store message ID in data attribute
           
           messageItem.innerHTML = `
             <div class="message-header">
@@ -980,13 +979,13 @@ export function appPageTemplate(username) {
             </div>
           `;
           
-          // 添加复制按钮事件
+          // Add copy button event
           const copyBtn = messageItem.querySelector('.copy-btn');
           copyBtn.addEventListener('click', function() {
             copyToClipboard(msg.text);
           });
           
-          // 添加删除按钮事件
+          // Add delete button event
           const deleteBtn = messageItem.querySelector('.delete-btn');
           deleteBtn.addEventListener('click', function() {
             showDeleteMessageConfirm(msg.id);
@@ -995,11 +994,11 @@ export function appPageTemplate(username) {
           messageList.appendChild(messageItem);
         });
         
-        // 滚动到底部
+        // Scroll to bottom
         messageList.scrollTop = messageList.scrollHeight;
       }
       
-      // 显示删除消息确认对话框
+      // Show delete message confirmation dialog
       function showDeleteMessageConfirm(messageId) {
         showConfirmDialog(
           'Delete Message', 
@@ -1008,15 +1007,15 @@ export function appPageTemplate(username) {
         );
       }
       
-      // 显示确认对话框
+      // Show confirmation dialog
       function showConfirmDialog(title, message, confirmCallback) {
-        // 删除任何现有的确认对话框
+        // Remove any existing confirmation dialog
         const existingDialog = document.getElementById('confirm-dialog');
         if (existingDialog) {
           existingDialog.remove();
         }
         
-        // 创建确认对话框
+        // Create confirmation dialog
         const dialog = document.createElement('div');
         dialog.id = 'confirm-dialog';
         dialog.className = 'confirm-dialog';
@@ -1058,39 +1057,39 @@ export function appPageTemplate(username) {
         document.body.appendChild(dialog);
       }
       
-      // 复制到剪贴板
+      // Copy to clipboard
       function copyToClipboard(text) {
-        // 方法1：使用Clipboard API（现代浏览器）
+        // Method 1: Use Clipboard API (modern browsers)
         if (navigator.clipboard && navigator.clipboard.writeText) {
           navigator.clipboard.writeText(text)
             .then(() => {
               showToast('Copied to clipboard!');
             })
             .catch(err => {
-              console.error('Clipboard API失败:', err);
-              // 失败时尝试备用方法
+              console.error('Clipboard API failed:', err);
+              // Fall back to alternative method
               fallbackCopyToClipboard(text);
             });
         } else {
-          // 方法2：回退到传统方法
+          // Method 2: Fall back to traditional method
           fallbackCopyToClipboard(text);
         }
       }
 
-      // 传统的复制方法
+      // Traditional copy method
       function fallbackCopyToClipboard(text) {
         try {
-          // 创建一个临时textarea元素
+          // Create a temporary textarea element
           const textArea = document.createElement('textarea');
           textArea.value = text;
           
-          // 设置样式使其不可见
+          // Make it invisible
           textArea.style.position = 'fixed';
           textArea.style.left = '-999999px';
           textArea.style.top = '-999999px';
           document.body.appendChild(textArea);
           
-          // 选择文本并复制
+          // Select and copy
           textArea.focus();
           textArea.select();
           
@@ -1103,28 +1102,28 @@ export function appPageTemplate(username) {
             showToast('Failed to copy text');
           }
         } catch (err) {
-          console.error('传统复制方法失败:', err);
+          console.error('Traditional copy method failed:', err);
           showToast('Failed to copy text');
         }
       }
       
-      // 显示提示信息
+      // Show toast message
       function showToast(message) {
-        // 删除现有的提示
+        // Remove existing toast
         const existingToast = document.getElementById('toast');
         if (existingToast) {
           existingToast.remove();
         }
         
-        // 创建新提示
+        // Create new toast
         const toast = document.createElement('div');
         toast.id = 'toast';
         toast.textContent = message;
         
-        // 添加到文档
+        // Add to document
         document.body.appendChild(toast);
         
-        // 3秒后自动消失
+        // Auto-remove after 3 seconds
         setTimeout(() => {
           toast.remove();
         }, 3000);
@@ -1190,30 +1189,30 @@ export function appPageTemplate(username) {
       
       // Initialize on page load
       window.addEventListener('load', () => {
-        console.log('页面加载，开始初始化...');
+        console.log('Page loaded, starting initialization...');
         
-        // 先加载文件列表
+        // First load file list
         loadFiles().then(() => {
-          console.log('文件列表初始加载完成');
+          console.log('Initial file list load complete');
         }).catch(err => {
-          console.error('初始文件列表加载失败:', err);
+          console.error('Initial file list load failed:', err);
         });
         
-        // 初始化拖放区域
+        // Initialize dropzone
         reinitializeDropzone();
         
-        // 初始化消息功能
+        // Initialize messaging functionality
         initMessaging().then(() => {
-          console.log('消息功能初始化完成');
+          console.log('Messaging functionality initialized');
         }).catch(err => {
-          console.error('消息功能初始化失败:', err);
+          console.error('Messaging functionality initialization failed:', err);
         });
         
-        // 开始轮询变更
+        // Start polling for changes
         pollForChanges();
         
-        // 显示设备ID
-        console.log('当前设备ID:', getDeviceId());
+        // Display device ID
+        console.log('Current device ID:', getDeviceId());
       });
     </script>
   </body>
