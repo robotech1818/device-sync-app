@@ -431,7 +431,7 @@ export function getAuthToken(request) {
   return url.searchParams.get('token');
 }
 
-// 验证令牌并返回用户名 - 优化JWT验证流程
+// 验证令牌并返回用户名 - 修复JWT验证流程
 export async function validateToken(token, env) {
   try {
     if (!token) {
@@ -448,12 +448,22 @@ export async function validateToken(token, env) {
     
     logger.debug(`尝试验证令牌，使用密钥长度: ${env.JWT_SECRET?.length || '未知'}`);
     
-    // 验证并解码JWT令牌（合并验证和解码操作）
     try {
-      const decoded = await jwt.verify(token, env.JWT_SECRET, { complete: true });
+      // 先验证JWT令牌
+      const isValid = await jwt.verify(token, env.JWT_SECRET);
+      if (!isValid) {
+        logger.debug('JWT验证失败');
+        return null;
+      }
       
-      // 验证成功，解码的载荷已在decoded中
-      logger.debug('JWT验证成功，载荷: ' + JSON.stringify(decoded.payload));
+      // 然后单独解码令牌获取载荷
+      const decoded = jwt.decode(token);
+      logger.debug('JWT验证成功，载荷: ' + JSON.stringify(decoded));
+      
+      if (!decoded || !decoded.payload) {
+        logger.error('JWT解码返回无效数据');
+        return null;
+      }
       
       // 检查令牌中的版本号与当前全局版本号
       const tokenVersion = decoded.payload.authVersion || '0';
@@ -479,7 +489,7 @@ export async function validateToken(token, env) {
       
       return decoded.payload.username;
     } catch (jwtErr) {
-      logger.error('JWT验证失败', jwtErr);
+      logger.error('JWT验证或解码失败', jwtErr);
       return null;
     }
   } catch (err) {
