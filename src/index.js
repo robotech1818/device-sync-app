@@ -1,5 +1,12 @@
 import jwt from '@tsndr/cloudflare-worker-jwt';
-import { handleLogin, getAuthToken, validateToken } from './auth';
+import { 
+  handleLogin, 
+  getAuthToken, 
+  validateToken, 
+  handleLogout, 
+  handleRefreshToken, 
+  handleForceRelogin 
+} from './auth';
 import { 
   listFiles, 
   handleFileUpload, 
@@ -33,6 +40,21 @@ export default {
       return handleLogin(request, env);
     }
     
+    // Handle logout request
+    if (path === '/api/logout' && request.method === 'POST') {
+      return handleLogout(request, env);
+    }
+    
+    // Handle token refresh request
+    if (path === '/api/refresh-token' && request.method === 'POST') {
+      return handleRefreshToken(request, env);
+    }
+    
+    // Handle force relogin (admin only)
+    if (path === '/api/admin/force-relogin' && request.method === 'POST') {
+      return handleForceRelogin(request, env);
+    }
+    
     // All paths below require authentication
     const token = getAuthToken(request);
     if (!token) {
@@ -60,7 +82,7 @@ export default {
         return downloadFile(fileId, username, env);
       }
       
-      // 新增：删除文件路由
+      // 删除文件路由
       if (path.startsWith('/api/files/delete/') && request.method === 'DELETE') {
         const fileId = path.split('/').pop();
         return deleteFile(fileId, username, env);
@@ -84,7 +106,7 @@ export default {
         return syncMessage(request, username, env);
       }
       
-      // 新增：删除消息路由
+      // 删除消息路由
       if (path.startsWith('/api/messages/delete/') && request.method === 'DELETE') {
         const messageId = path.split('/').pop();
         return deleteMessage(messageId, username, env);
