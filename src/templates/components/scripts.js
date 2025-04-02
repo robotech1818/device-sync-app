@@ -1,6 +1,83 @@
 export function scriptsComponent() {
   return `
   <script>
+    // 令牌刷新机制
+    function setupTokenRefresh() {
+      // 令牌刷新周期 (每小时刷新一次，适用于4小时有效期的令牌)
+      const refreshInterval = 60 * 60 * 1000; // 1小时，单位：毫秒
+      
+      // 设置定时刷新
+      setInterval(async () => {
+        try {
+          console.log('尝试刷新认证令牌...');
+          
+          // 获取当前令牌
+          const currentToken = getToken();
+          if (!currentToken) {
+            console.log('无令牌可刷新，跳过');
+            return;
+          }
+          
+          // 调用刷新令牌API
+          const response = await authenticatedFetch('/api/refresh-token', {
+            method: 'POST'
+          });
+          
+          if (!response.ok) {
+            console.error('令牌刷新失败:', response.status);
+            
+            // 如果刷新失败且状态码为401，则可能是令牌已失效，重定向到登录页
+            if (response.status === 401) {
+              console.log('令牌已失效，重定向到登录页');
+              logout();
+            }
+            return;
+          }
+          
+          const data = await response.json();
+          if (data.success && data.token) {
+            // 更新存储的令牌
+            localStorage.setItem('authToken', data.token);
+            document.cookie = \`authToken=\${data.token}; path=/; max-age=\${data.expiresIn}; SameSite=Strict\`;
+            console.log('令牌已成功刷新');
+          } else {
+            console.error('令牌刷新返回无效数据');
+          }
+        } catch (err) {
+          console.error('令牌刷新过程中发生错误:', err);
+        }
+      }, refreshInterval);
+      
+      console.log('令牌自动刷新已设置，间隔:', refreshInterval, 'ms');
+    }
+
+    // 统一的登出函数
+    async function logout() {
+      try {
+        // 如果有令牌，尝试调用服务端注销
+        const token = getToken();
+        if (token) {
+          try {
+            await authenticatedFetch('/api/logout', {
+              method: 'POST'
+            });
+            console.log('服务端注销成功');
+          } catch (err) {
+            console.error('服务端注销失败:', err);
+          }
+        }
+      } catch (err) {
+        console.error('注销过程中发生错误:', err);
+      } finally {
+        // 无论服务端注销是否成功，都清除本地存储
+        localStorage.removeItem('authToken');
+        document.cookie = 'authToken=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+        
+        // 重定向到登录页
+        window.location.href = '/login';
+      }
+    }
+    
     // Get token from multiple sources
     function getToken() {
       // 1. Try to get from URL parameters
@@ -52,19 +129,63 @@ export function scriptsComponent() {
     
     // Authenticated fetch function
     async function authenticatedFetch(url, options = {}) {
-      // Get latest token for each request
-      const currentToken = getToken();
-      
-      if (!currentToken) {
-        console.error('Token not found during request, redirecting to login');
-        window.location.href = '/login';
-        throw new Error('Unauthorized');
+      try {
+        // Get latest token for each request
+        const currentToken = getToken();
+        
+        if (!currentToken) {
+          console.error('Token not found during request, redirecting to login');
+          logout();
+          throw new Error('Unauthorized');
+        }
+        
+        const headers = options.headers || {};
+        headers['Authorization'] = "Bearer " + currentToken;
+        
+        const response = await fetch(url, { ...options, headers });
+        
+        // 检查是否因为认证问题而失败
+        if (response.status === 401) {
+          console.error('请求返回401未授权，可能是令牌已过期或无效');
+          
+          // 尝试刷新令牌一次
+          try {
+            const refreshResponse = await fetch('/api/refresh-token', {
+              method: 'POST',
+              headers: { 'Authorization': "Bearer " + currentToken }
+            });
+            
+            if (refreshResponse.ok) {
+              const data = await refreshResponse.json();
+              if (data.success && data.token) {
+                // 更新令牌
+                localStorage.setItem('authToken', data.token);
+                document.cookie = \`authToken=\${data.token}; path=/; max-age=\${data.expiresIn}; SameSite=Strict\`;
+                console.log('令牌已刷新，重试请求');
+                
+                // 使用新令牌重试原始请求
+                const newHeaders = { ...headers };
+                newHeaders['Authorization'] = "Bearer " + data.token;
+                return fetch(url, { ...options, headers: newHeaders });
+              }
+            }
+            
+            // 刷新失败，登出
+            console.error('令牌刷新失败，将登出');
+            logout();
+            throw new Error('Unauthorized: Token refresh failed');
+          } catch (refreshErr) {
+            console.error('令牌刷新过程中发生错误:', refreshErr);
+            logout();
+            throw new Error('Unauthorized: Error during token refresh');
+          }
+        }
+        
+        return response;
+      } catch (err) {
+        console.error('authenticated fetch error:', err);
+        throw err;
       }
-      
-      const headers = options.headers || {};
-      headers['Authorization'] = "Bearer " + currentToken;
-      
-      return fetch(url, { ...options, headers });
     }
     
     // Get file list
@@ -552,7 +673,7 @@ export function scriptsComponent() {
       messageList.innerHTML = '';
       
       if (messages.length === 0) {
-        // 使用 DOM API 创建空消息提示，避免使用模板字符串
+        // 使用 DOM API 创建空消息提示
         const emptyItem = document.createElement('li');
         emptyItem.className = 'message-item other';
         
@@ -580,7 +701,7 @@ export function scriptsComponent() {
       }
       
       messages.forEach(msg => {
-        // 使用 DOM API 创建消息项，避免使用模板字符串
+        // 使用 DOM API 创建消息项
         const messageItem = document.createElement('li');
         const isSelf = msg.deviceId === deviceId;
         messageItem.className = 'message-item ' + (isSelf ? 'self' : 'other');
@@ -819,16 +940,15 @@ export function scriptsComponent() {
       return deviceId;
     }
     
-    // Logout
-    document.getElementById('logoutBtn').addEventListener('click', () => {
-      localStorage.removeItem('authToken');
-      document.cookie = 'authToken=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
-      window.location.href = '/login';
-    });
+    // Logout 使用新的统一登出函数
+    document.getElementById('logoutBtn').addEventListener('click', logout);
     
     // Initialize on page load
     window.addEventListener('load', () => {
       console.log('Page loaded, starting initialization...');
+      
+      // 初始化令牌自动刷新
+      setupTokenRefresh();
       
       // First load file list
       loadFiles().then(() => {
