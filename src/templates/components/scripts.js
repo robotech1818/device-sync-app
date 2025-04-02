@@ -935,7 +935,7 @@ export function scriptsComponent() {
             if (response.ok) {
               const data = await response.json();
               if (data.success && data.changes && data.changes.length > 0) {
-                console.log(`Found ${data.changes.length} file changes`);
+                console.log('发现' + data.changes.length + '个文件.');
                 // 重置非活跃计数器
                 inactiveCounter = 0;
                 // 更新文件列表
