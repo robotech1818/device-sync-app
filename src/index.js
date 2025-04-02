@@ -171,22 +171,26 @@ export default {
   }
 };
 
-// 优化: 使用批量操作获取文件变更
+// 修复文件变更获取函数
 async function getFileChanges(since, username, env) {
   since = parseInt(since);
   
   try {
-    // 使用列表操作一次性获取所有元数据键
+    // 使用更安全的方式列出文件
     const prefix = `file:${username}:`;
     const metaSuffix = ':meta';
     
-    const filesList = await env.SYNC_KV.list({ 
-      prefix,
-      suffix: metaSuffix
-    });
+    // 只使用 prefix 参数，然后手动过滤包含 metaSuffix 的键
+    const files = await env.SYNC_KV.list({ prefix });
     
-    // 如果没有文件，直接返回空数组
-    if (filesList.keys.length === 0) {
+    // 日志记录
+    console.log(`KV查询返回的键数量: ${files.keys.length}`);
+    
+    // 手动过滤出元数据键（以:meta结尾）
+    const metaKeys = files.keys.filter(key => key.name.endsWith(metaSuffix));
+    console.log(`找到的元数据键数量: ${metaKeys.length}`);
+    
+    if (metaKeys.length === 0) {
       return new Response(JSON.stringify({
         success: true,
         changes: []
@@ -195,19 +199,24 @@ async function getFileChanges(since, username, env) {
       });
     }
     
-    // 批量获取所有元数据
-    const metaPromises = filesList.keys.map(key => 
-      env.SYNC_KV.get(key.name, 'json')
-    );
+    // 获取所有文件元数据并筛选出自上次同步以来修改的文件
+    const changes = [];
+    for (const key of metaKeys) {
+      try {
+        const metadata = await env.SYNC_KV.get(key.name, 'json');
+        if (metadata) {
+          // 转换时间戳进行比较
+          const modifiedTime = new Date(metadata.lastModified).getTime();
+          if (modifiedTime > since) {
+            changes.push(metadata);
+          }
+        }
+      } catch (metaErr) {
+        console.error(`获取元数据错误 ${key.name}:`, metaErr.message);
+      }
+    }
     
-    const metadataResults = await Promise.all(metaPromises);
-    const allMetadata = metadataResults.filter(Boolean);
-    
-    // 筛选出自上次同步以来修改的文件
-    const changes = allMetadata.filter(metadata => {
-      const modifiedTime = new Date(metadata.lastModified).getTime();
-      return modifiedTime > since;
-    });
+    console.log(`找到 ${changes.length} 个变更文件`);
     
     return new Response(JSON.stringify({
       success: true,
@@ -216,6 +225,8 @@ async function getFileChanges(since, username, env) {
       headers: { 'Content-Type': 'application/json' }
     });
   } catch (err) {
+    console.error(`获取文件变更错误: ${err.message}`);
+    console.error(err.stack);
     return new Response(JSON.stringify({
       success: false,
       error: `Failed to get file changes: ${err.message}`
