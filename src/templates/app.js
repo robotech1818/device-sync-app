@@ -929,7 +929,7 @@ export function appPageTemplate(username) {
           });
           
           if (!response.ok) {
-            console.error(`删除消息失败，状态码: ${response.status}`);
+            console.error(`Message deletion failed, status code: ${response.status}`);
           }
           
           // 更新UI
