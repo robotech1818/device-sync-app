@@ -7,7 +7,9 @@ import {
   syncFileStatus, 
   syncMessage, 
   getMessages,
-  clearMessages // 新增导入这个函数
+  clearMessages,
+  deleteFile,
+  deleteMessage
 } from './files';
 import { loginPageTemplate } from './templates/login';
 import { appPageTemplate } from './templates/app';
@@ -58,6 +60,12 @@ export default {
         return downloadFile(fileId, username, env);
       }
       
+      // 新增：删除文件路由
+      if (path.startsWith('/api/files/delete/') && request.method === 'DELETE') {
+        const fileId = path.split('/').pop();
+        return deleteFile(fileId, username, env);
+      }
+      
       if (path === '/api/files/sync' && request.method === 'POST') {
         return syncFileStatus(request, username, env);
       }
@@ -67,7 +75,7 @@ export default {
         return getFileChanges(since, username, env);
       }
       
-      // New messaging endpoints
+      // 消息管理端点
       if (path === '/api/messages' && request.method === 'GET') {
         return getMessages(username, env);
       }
@@ -76,16 +84,22 @@ export default {
         return syncMessage(request, username, env);
       }
       
+      // 新增：删除消息路由
+      if (path.startsWith('/api/messages/delete/') && request.method === 'DELETE') {
+        const messageId = path.split('/').pop();
+        return deleteMessage(messageId, username, env);
+      }
+      
+      // 清除所有消息端点
+      if (path === '/api/messages/clear' && request.method === 'POST') {
+        return clearMessages(username, env);
+      }
+      
       // App main page
       if (path === '/app') {
         return new Response(appPageTemplate(username), {
           headers: { 'Content-Type': 'text/html;charset=UTF-8' }
         });
-      }
-      
-      // 新增清除消息端点
-      if (path === '/api/messages/clear' && request.method === 'POST') {
-        return clearMessages(username, env);
       }
       
       // 404 - Path not found
