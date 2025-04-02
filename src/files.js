@@ -1,4 +1,4 @@
-// 列出用户的文件
+// 列出用户的文件 - 修复版本
 export async function listFiles(username, env) {
   console.log(`获取用户 ${username} 的文件列表`);
   
@@ -9,29 +9,32 @@ export async function listFiles(username, env) {
     
     console.log(`使用前缀查询: ${prefix}`);
     
-    // 获取所有以此前缀开头且以metaSuffix结尾的键
-    const files = await env.SYNC_KV.list({ 
-      prefix,
-      suffix: metaSuffix 
-    });
+    // 获取所有以此前缀开头的键
+    const files = await env.SYNC_KV.list({ prefix });
     
     console.log(`KV查询返回的键数量: ${files.keys.length}`);
+    console.log(`KV查询返回的键:`, files.keys.map(k => k.name));
     
-    // 批量获取文件元数据
+    // 筛选出元数据键（以:meta结尾）
+    const metaKeys = files.keys.filter(key => key.name.endsWith(metaSuffix));
+    console.log(`找到的元数据键数量: ${metaKeys.length}`);
+    
+    // 处理文件列表
     const fileList = [];
-    if (files.keys.length > 0) {
-      const metaPromises = files.keys.map(key => 
-        env.SYNC_KV.get(key.name, 'json')
-      );
-      
-      const metadataResults = await Promise.all(metaPromises);
-      
-      // 过滤掉无效的元数据
-      metadataResults.forEach(metadata => {
+    for (const key of metaKeys) {
+      console.log(`获取文件元数据: ${key.name}`);
+      try {
+        const metadata = await env.SYNC_KV.get(key.name, 'json');
         if (metadata) {
+          console.log(`找到有效元数据:`, metadata);
           fileList.push(metadata);
+        } else {
+          console.log(`元数据为空: ${key.name}`);
         }
-      });
+      } catch (metaErr) {
+        console.error(`获取元数据错误 ${key.name}:`, metaErr.message);
+        // 继续处理下一个文件，不中断
+      }
     }
     
     console.log(`总共返回 ${fileList.length} 个文件`);

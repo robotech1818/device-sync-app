@@ -171,41 +171,34 @@ export default {
   }
 };
 
-// 修复文件变更获取函数
+// 获取文件变更 - 修复版本
 async function getFileChanges(since, username, env) {
   since = parseInt(since);
   
   try {
-    // 使用更安全的方式列出文件
+    console.log(`获取用户 ${username} 的文件变更，since: ${since}`);
+    
+    // 获取所有文件元数据
     const prefix = `file:${username}:`;
     const metaSuffix = ':meta';
     
-    // 只使用 prefix 参数，然后手动过滤包含 metaSuffix 的键
+    // 获取所有以此前缀开头的键
     const files = await env.SYNC_KV.list({ prefix });
     
-    // 日志记录
     console.log(`KV查询返回的键数量: ${files.keys.length}`);
     
-    // 手动过滤出元数据键（以:meta结尾）
+    // 筛选出元数据键（以:meta结尾）
     const metaKeys = files.keys.filter(key => key.name.endsWith(metaSuffix));
     console.log(`找到的元数据键数量: ${metaKeys.length}`);
     
-    if (metaKeys.length === 0) {
-      return new Response(JSON.stringify({
-        success: true,
-        changes: []
-      }), {
-        headers: { 'Content-Type': 'application/json' }
-      });
-    }
-    
-    // 获取所有文件元数据并筛选出自上次同步以来修改的文件
     const changes = [];
+    
+    // 逐个处理元数据，不使用批量处理以避免错误
     for (const key of metaKeys) {
       try {
         const metadata = await env.SYNC_KV.get(key.name, 'json');
         if (metadata) {
-          // 转换时间戳进行比较
+          // 转换最后修改时间为时间戳，用于比较
           const modifiedTime = new Date(metadata.lastModified).getTime();
           if (modifiedTime > since) {
             changes.push(metadata);
@@ -213,10 +206,11 @@ async function getFileChanges(since, username, env) {
         }
       } catch (metaErr) {
         console.error(`获取元数据错误 ${key.name}:`, metaErr.message);
+        // 继续处理下一个文件，不中断
       }
     }
     
-    console.log(`找到 ${changes.length} 个变更文件`);
+    console.log(`找到 ${changes.length} 个变更的文件`);
     
     return new Response(JSON.stringify({
       success: true,
