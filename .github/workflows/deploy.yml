@@ -24,4 +24,4 @@ jobs:
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CF_API_TOKEN }}
-          # 移除secrets配置部分
+          wranglerVersion: '4.6.0'
