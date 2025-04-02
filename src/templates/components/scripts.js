@@ -193,7 +193,7 @@ export function scriptsComponent() {
       try {
         console.log('Loading file list...');
         
-        // Add timestamp to avoid browser caching
+        // 使用缓存破坏参数防止浏览器缓存
         const timestamp = new Date().getTime();
         const response = await authenticatedFetch("/api/files/list?_=" + timestamp);
         
@@ -237,13 +237,8 @@ export function scriptsComponent() {
         
         console.log('Found ' + data.files.length + ' files, starting render');
         
-        // Sort by most recent modification
-        data.files.sort((a, b) => {
-          return new Date(b.lastModified) - new Date(a.lastModified);
-        });
-        
-        // Only display the most recent 10 files
-        const recentFiles = data.files.slice(0, 10);
+        // 文件已经按最近修改时间排序，直接显示
+        const recentFiles = data.files;
         
         // Render each file
         recentFiles.forEach((file, index) => {
@@ -519,13 +514,13 @@ export function scriptsComponent() {
       const messageList = document.getElementById('messageList');
       const clearMessagesBtn = document.getElementById('clearMessagesBtn');
       
-      // First load local messages
+      // 首先加载本地消息
       const localMessages = JSON.parse(localStorage.getItem('syncMessages') || '[]');
       
-      // Get and merge server messages
+      // 获取并合并服务器消息
       await loadAndMergeServerMessages(localMessages);
       
-      // Send message event handling
+      // 发送消息事件处理
       messageForm.addEventListener('submit', (e) => {
         e.preventDefault();
         const messageText = messageInput.value.trim();
@@ -535,12 +530,12 @@ export function scriptsComponent() {
         }
       });
       
-      // Clear messages event handling
+      // 清除消息事件处理
       clearMessagesBtn.addEventListener('click', async () => {
         if (confirm('Are you sure you want to clear all messages?')) {
           localStorage.removeItem('syncMessages');
           try {
-            // Also clear messages on server
+            // 同时清除服务器消息
             await authenticatedFetch('/api/messages/clear', {
               method: 'POST'
             });
@@ -552,28 +547,28 @@ export function scriptsComponent() {
       });
     }
     
-    // Load and merge server messages with local messages
+    // 加载并合并服务器消息与本地消息
     async function loadAndMergeServerMessages(localMessages) {
       try {
         const response = await authenticatedFetch('/api/messages');
         if (response.ok) {
           const data = await response.json();
           if (data.success && data.messages) {
-            // Merge local and server messages, avoiding duplicates
+            // 合并本地和服务器消息，避免重复
             const serverMessages = data.messages;
             const allMessages = [...localMessages];
             
-            // Add messages that exist on server but not locally
+            // 添加在服务器上存在但本地不存在的消息
             serverMessages.forEach(serverMsg => {
               if (!allMessages.some(localMsg => localMsg.id === serverMsg.id)) {
                 allMessages.push(serverMsg);
               }
             });
             
-            // Sort by timestamp
+            // 按时间戳排序
             allMessages.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
             
-            // Save merged messages
+            // 保存合并后的消息
             localStorage.setItem('syncMessages', JSON.stringify(allMessages));
             renderMessages(allMessages);
           } else {
@@ -588,7 +583,7 @@ export function scriptsComponent() {
       }
     }
     
-    // Send new message
+    // 发送新消息
     async function sendMessage(text) {
       const deviceId = getDeviceId();
       const message = {
@@ -598,25 +593,25 @@ export function scriptsComponent() {
         timestamp: new Date().toISOString()
       };
       
-      // Add to localStorage
+      // 添加到localStorage
       const messages = JSON.parse(localStorage.getItem('syncMessages') || '[]');
       messages.push(message);
       
-      // Limit number of messages
+      // 限制消息数量
       if (messages.length > MAX_MESSAGES) {
         messages.splice(0, messages.length - MAX_MESSAGES);
       }
       
       localStorage.setItem('syncMessages', JSON.stringify(messages));
       
-      // Update UI
+      // 更新UI
       renderMessages(messages);
       
-      // Sync to server
+      // 同步到服务器
       await syncMessageToServer(message);
     }
     
-    // Sync message to server
+    // 同步消息到服务器
     async function syncMessageToServer(message) {
       try {
         const response = await authenticatedFetch('/api/messages/sync', {
@@ -640,15 +635,15 @@ export function scriptsComponent() {
       }
     }
     
-    // Delete message
+    // 删除消息
     async function deleteMessage(messageId) {
       try {
-        // Delete from local storage
+        // 从本地存储中删除
         const messages = JSON.parse(localStorage.getItem('syncMessages') || '[]');
         const updatedMessages = messages.filter(msg => msg.id !== messageId);
         localStorage.setItem('syncMessages', JSON.stringify(updatedMessages));
         
-        // Delete from server
+        // 从服务器删除
         const response = await authenticatedFetch("/api/messages/delete/" + messageId, {
           method: 'DELETE'
         });
@@ -657,7 +652,7 @@ export function scriptsComponent() {
           console.error("Message deletion failed, status code: " + response.status);
         }
         
-        // Update UI
+        // 更新UI
         renderMessages(updatedMessages);
         showToast('Message deleted');
       } catch (err) {
@@ -666,7 +661,7 @@ export function scriptsComponent() {
       }
     }
     
-    // Render messages UI
+    // 渲染消息UI
     function renderMessages(messages) {
       const deviceId = getDeviceId();
       const messageList = document.getElementById('messageList');
@@ -758,7 +753,7 @@ export function scriptsComponent() {
       messageList.scrollTop = messageList.scrollHeight;
     }
     
-    // Show delete message confirmation dialog
+    // 显示删除消息确认对话框
     function showDeleteMessageConfirm(messageId) {
       showConfirmDialog(
         'Delete Message', 
@@ -767,15 +762,15 @@ export function scriptsComponent() {
       );
     }
     
-    // Show confirmation dialog
+    // 显示确认对话框
     function showConfirmDialog(title, message, confirmCallback) {
-      // Remove any existing confirmation dialog
+      // 移除任何现有的确认对话框
       const existingDialog = document.getElementById('confirm-dialog');
       if (existingDialog) {
         existingDialog.remove();
       }
       
-      // Create confirmation dialog
+      // 创建确认对话框
       const dialog = document.createElement('div');
       dialog.id = 'confirm-dialog';
       dialog.className = 'confirm-dialog';
@@ -817,9 +812,9 @@ export function scriptsComponent() {
       document.body.appendChild(dialog);
     }
     
-    // Copy to clipboard
+    // 复制到剪贴板
     function copyToClipboard(text) {
-      // Method 1: Use Clipboard API (modern browsers)
+      // 方法1: 使用剪贴板API(现代浏览器)
       if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(text)
           .then(() => {
@@ -827,29 +822,29 @@ export function scriptsComponent() {
           })
           .catch(err => {
             console.error('Clipboard API failed:', err);
-            // Fall back to alternative method
+            // 回退到替代方法
             fallbackCopyToClipboard(text);
           });
       } else {
-        // Method 2: Fall back to traditional method
+        // 方法2: 回退到传统方法
         fallbackCopyToClipboard(text);
       }
     }
 
-    // Traditional copy method
+    // 传统复制方法
     function fallbackCopyToClipboard(text) {
       try {
-        // Create a temporary textarea element
+        // 创建临时textarea元素
         const textArea = document.createElement('textarea');
         textArea.value = text;
         
-        // Make it invisible
+        // 使其不可见
         textArea.style.position = 'fixed';
         textArea.style.left = '-999999px';
         textArea.style.top = '-999999px';
         document.body.appendChild(textArea);
         
-        // Select and copy
+        // 选择并复制
         textArea.focus();
         textArea.select();
         
@@ -867,29 +862,29 @@ export function scriptsComponent() {
       }
     }
     
-    // Show toast message
+    // 显示提示消息
     function showToast(message) {
-      // Remove existing toast
+      // 移除现有提示
       const existingToast = document.getElementById('toast');
       if (existingToast) {
         existingToast.remove();
       }
       
-      // Create new toast
+      // 创建新提示
       const toast = document.createElement('div');
       toast.id = 'toast';
       toast.textContent = message;
       
-      // Add to document
+      // 添加到文档
       document.body.appendChild(toast);
       
-      // Auto-remove after 3 seconds
+      // 3秒后自动移除
       setTimeout(() => {
         toast.remove();
       }, 3000);
     }
     
-    // Escape HTML to prevent XSS
+    // 转义HTML以防止XSS
     function escapeHTML(text) {
       return text
         .replace(/&/g, '&amp;')
@@ -899,38 +894,80 @@ export function scriptsComponent() {
         .replace(/'/g, '&#039;');
     }
     
-    // Poll for file changes
+    // 优化的轮询变更机制
     function pollForChanges() {
-      // Check for changes every 5 seconds
-      setInterval(async () => {
-        try {
-          // Get last sync time
-          const lastSync = localStorage.getItem('lastSyncTime') || 0;
-          
-          // Request file changes
-          const response = await authenticatedFetch('/api/files/changes?since=' + lastSync);
-          
-          if (response.status === 401) {
-            console.error('Token expired, redirecting to login');
-            localStorage.removeItem('authToken');
-            window.location.href = '/login';
-            return;
-          }
-          
-          if (response.ok) {
-            const data = await response.json();
-            if (data.success && data.changes && data.changes.length > 0) {
-              // New changes, reload file list
-              loadFiles();
+      // 减少轮询频率：从5秒改为30秒
+      const POLL_INTERVAL = 30000; // 30秒
+      // 为长时间不活跃的用户暂停轮询
+      let inactiveCounter = 0;
+      const MAX_INACTIVE = 10; // 约5分钟后减少轮询频率
+      let pollInterval;
+      
+      // 开始轮询
+      const startPolling = () => {
+        if (pollInterval) clearInterval(pollInterval);
+        
+        pollInterval = setInterval(async () => {
+          try {
+            // 如果用户长时间不活跃，减少轮询频率
+            if (inactiveCounter > MAX_INACTIVE) {
+              console.log("用户不活跃，减少轮询频率");
+              clearInterval(pollInterval);
+              // 切换到更长的间隔（5分钟）
+              pollInterval = setInterval(startPolling, 5 * 60 * 1000);
+              return;
             }
+            
+            inactiveCounter++;
+            
+            // 获取上次同步时间
+            const lastSync = localStorage.getItem('lastSyncTime') || 0;
+            
+            // 发送变更请求，添加缓存破坏参数
+            const response = await authenticatedFetch(`/api/files/changes?since=${lastSync}&_=${Date.now()}`);
+            
+            if (response.status === 401) {
+              console.error('Token expired, redirecting to login');
+              logout();
+              return;
+            }
+            
+            if (response.ok) {
+              const data = await response.json();
+              if (data.success && data.changes && data.changes.length > 0) {
+                console.log(`发现${data.changes.length}个文件变更，刷新列表`);
+                // 重置非活跃计数器
+                inactiveCounter = 0;
+                // 更新文件列表
+                loadFiles();
+              }
+            }
+          } catch (error) {
+            console.error('Sync error:', error);
           }
-        } catch (error) {
-          console.error('Sync error:', error);
+        }, POLL_INTERVAL);
+      };
+
+      // 监听用户交互，重置非活跃计数器
+      const resetInactiveCounter = () => {
+        inactiveCounter = 0;
+        // 如果处于低频轮询状态，恢复正常轮询
+        if (pollInterval && pollInterval._repeat > POLL_INTERVAL) {
+          startPolling();
         }
-      }, 5000);
+      };
+
+      // 添加用户交互事件监听
+      document.addEventListener('click', resetInactiveCounter);
+      document.addEventListener('keypress', resetInactiveCounter);
+      document.addEventListener('scroll', resetInactiveCounter);
+      document.addEventListener('mousemove', resetInactiveCounter);
+
+      // 启动轮询
+      startPolling();
     }
     
-    // Get device ID
+    // 获取设备ID
     function getDeviceId() {
       let deviceId = localStorage.getItem('deviceId');
       if (!deviceId) {
@@ -940,37 +977,37 @@ export function scriptsComponent() {
       return deviceId;
     }
     
-    // Logout 使用新的统一登出函数
+    // 使用新的统一登出函数
     document.getElementById('logoutBtn').addEventListener('click', logout);
     
-    // Initialize on page load
+    // 页面加载时初始化
     window.addEventListener('load', () => {
       console.log('Page loaded, starting initialization...');
       
       // 初始化令牌自动刷新
       setupTokenRefresh();
       
-      // First load file list
+      // 首先加载文件列表
       loadFiles().then(() => {
         console.log('Initial file list load complete');
       }).catch(err => {
         console.error('Initial file list load failed:', err);
       });
       
-      // Initialize dropzone
+      // 初始化dropzone
       reinitializeDropzone();
       
-      // Initialize messaging functionality
+      // 初始化消息功能
       initMessaging().then(() => {
         console.log('Messaging functionality initialized');
       }).catch(err => {
         console.error('Messaging functionality initialization failed:', err);
       });
       
-      // Start polling for changes
+      // 开始轮询变更
       pollForChanges();
       
-      // Display device ID
+      // 显示设备ID
       console.log('Current device ID:', getDeviceId());
     });
   </script>
