@@ -104,13 +104,13 @@ export function scriptsComponent() {
         
         if (!data.success) {
           console.error('API returned error:', data.error);
-          fileListEl.innerHTML = '<li class="file-item"><div class="file-info"><h3 class="file-name">Error: ' + (data.error || 'Unknown error') + '</h3></div></li>';
+          fileListEl.innerHTML = '<li className="file-item"><div className="file-info"><h3 className="file-name">Error: ' + (data.error || 'Unknown error') + '</h3></div></li>';
           return;
         }
         
         if (!data.files || !Array.isArray(data.files) || data.files.length === 0) {
           console.log('No files found');
-          fileListEl.innerHTML = '<li class="file-item"><div class="file-info"><h3 class="file-name">No files found</h3></div></li>';
+          fileListEl.innerHTML = '<li className="file-item"><div className="file-info"><h3 className="file-name">No files found</h3></div></li>';
           return;
         }
         
@@ -174,7 +174,7 @@ export function scriptsComponent() {
         console.error('Error loading file list:', err);
         const fileListEl = document.getElementById('fileList');
         if (fileListEl) {
-          fileListEl.innerHTML = '<li class="file-item"><div class="file-info"><h3 class="file-name">Error loading files: ' + err.message + '</h3></div></li>';
+          fileListEl.innerHTML = '<li className="file-item"><div className="file-info"><h3 className="file-name">Error loading files: ' + err.message + '</h3></div></li>';
         }
       }
     }
@@ -552,49 +552,83 @@ export function scriptsComponent() {
       messageList.innerHTML = '';
       
       if (messages.length === 0) {
+        // 使用 DOM API 创建空消息提示，避免使用模板字符串
         const emptyItem = document.createElement('li');
         emptyItem.className = 'message-item other';
-        emptyItem.innerHTML = `
-          <div class="message-header">
-            <span>System</span>
-            <span>${formatDate(new Date().toISOString())}</span>
-          </div>
-          <div class="message-content">No messages yet. Start the conversation!</div>
-        `;
+        
+        const messageHeader = document.createElement('div');
+        messageHeader.className = 'message-header';
+        
+        const senderSpan = document.createElement('span');
+        senderSpan.textContent = 'System';
+        
+        const timeSpan = document.createElement('span');
+        timeSpan.textContent = formatDate(new Date().toISOString());
+        
+        messageHeader.appendChild(senderSpan);
+        messageHeader.appendChild(timeSpan);
+        
+        const messageContent = document.createElement('div');
+        messageContent.className = 'message-content';
+        messageContent.textContent = 'No messages yet. Start the conversation!';
+        
+        emptyItem.appendChild(messageHeader);
+        emptyItem.appendChild(messageContent);
+        
         messageList.appendChild(emptyItem);
         return;
       }
       
       messages.forEach(msg => {
+        // 使用 DOM API 创建消息项，避免使用模板字符串
         const messageItem = document.createElement('li');
         const isSelf = msg.deviceId === deviceId;
+        messageItem.className = 'message-item ' + (isSelf ? 'self' : 'other');
+        messageItem.dataset.messageId = msg.id;
         
-        messageItem.className = \`message-item \${isSelf ? 'self' : 'other'}\`;
-        messageItem.dataset.messageId = msg.id; // Store message ID in data attribute
+        // 创建消息头部
+        const messageHeader = document.createElement('div');
+        messageHeader.className = 'message-header';
         
-        messageItem.innerHTML = \`
-          <div class="message-header">
-            <span>\${isSelf ? 'You (This Device)' : 'Device ' + msg.deviceId.substring(0, 8)}</span>
-            <span>\${formatDate(msg.timestamp)}</span>
-          </div>
-          <div class="message-content">\${escapeHTML(msg.text)}</div>
-          <div class="message-actions">
-            <button class="small-btn copy-btn">Copy</button>
-            <button class="small-btn delete-btn">Delete</button>
-          </div>
-        \`;
+        const senderSpan = document.createElement('span');
+        senderSpan.textContent = isSelf ? 'You (This Device)' : 'Device ' + msg.deviceId.substring(0, 8);
         
-        // Add copy button event
-        const copyBtn = messageItem.querySelector('.copy-btn');
+        const timeSpan = document.createElement('span');
+        timeSpan.textContent = formatDate(msg.timestamp);
+        
+        messageHeader.appendChild(senderSpan);
+        messageHeader.appendChild(timeSpan);
+        
+        // 创建消息内容
+        const messageContent = document.createElement('div');
+        messageContent.className = 'message-content';
+        messageContent.textContent = escapeHTML(msg.text);
+        
+        // 创建消息操作
+        const messageActions = document.createElement('div');
+        messageActions.className = 'message-actions';
+        
+        const copyBtn = document.createElement('button');
+        copyBtn.className = 'small-btn copy-btn';
+        copyBtn.textContent = 'Copy';
         copyBtn.addEventListener('click', function() {
           copyToClipboard(msg.text);
         });
         
-        // Add delete button event
-        const deleteBtn = messageItem.querySelector('.delete-btn');
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'small-btn delete-btn';
+        deleteBtn.textContent = 'Delete';
         deleteBtn.addEventListener('click', function() {
           showDeleteMessageConfirm(msg.id);
         });
+        
+        messageActions.appendChild(copyBtn);
+        messageActions.appendChild(deleteBtn);
+        
+        // 将所有元素组合在一起
+        messageItem.appendChild(messageHeader);
+        messageItem.appendChild(messageContent);
+        messageItem.appendChild(messageActions);
         
         messageList.appendChild(messageItem);
       });
@@ -821,3 +855,4 @@ export function scriptsComponent() {
     });
   </script>
   `;
+}
